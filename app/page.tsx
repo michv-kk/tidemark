@@ -1,101 +1,151 @@
-import Image from "next/image";
+'use client';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import TransactionCard from '@/components/TransactionCard';
+import TransactionModal from '@/components/TransactionModal';
+import StatsBar from '@/components/StatsBar';
+import { Transaction, ChainId } from '@/lib/types';
+import { generateTransaction, generateInitialTransactions } from '@/lib/transactionGenerator';
+import { useAlerts } from '@/contexts/AlertsContext';
+import { useSettings } from '@/contexts/SettingsContext';
+import { Filter, Pause, Play } from 'lucide-react';
 
-export default function Home() {
+const CHAINS: ChainId[] = ['ETH', 'BTC', 'BSC', 'SOL', 'ARB', 'MATIC', 'AVAX', 'OP'];
+const MIN_VALUES = [
+  { label: 'All', value: 0 },
+  { label: '$100K+', value: 100_000 },
+  { label: '$500K+', value: 500_000 },
+  { label: '$1M+', value: 1_000_000 },
+  { label: '$10M+', value: 10_000_000 },
+];
+
+export default function DashboardPage() {
+  const { addTransactionAlert } = useAlerts();
+  const { settings } = useSettings();
+  const [txs, setTxs] = useState<Transaction[]>([]);
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [chainFilter, setChainFilter] = useState<ChainId | 'ALL'>('ALL');
+  const [minValue, setMinValue] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+
+  useEffect(() => {
+    setTxs(generateInitialTransactions(50));
+  }, []);
+
+  useEffect(() => {
+    if (paused) { clearInterval(intervalRef.current); return; }
+    const delay = Math.max(800, (settings.autoRefresh * 1000) / 8);
+    intervalRef.current = setInterval(() => {
+      const tx = generateTransaction();
+      setTxs(prev => [tx, ...prev].slice(0, 200));
+      if (tx.isWhale && tx.value >= settings.minWhaleSize) {
+        addTransactionAlert(tx);
+      }
+    }, delay);
+    return () => clearInterval(intervalRef.current);
+  }, [paused, settings.autoRefresh, settings.minWhaleSize, addTransactionAlert]);
+
+  const filtered = useMemo(() => {
+    return txs.filter(tx => {
+      if (chainFilter !== 'ALL' && tx.chain !== chainFilter) return false;
+      if (tx.value < minValue) return false;
+      return true;
+    });
+  }, [txs, chainFilter, minValue]);
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="page-container">
+      {/* Hero */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="live-dot" />
+          <span className="text-xs text-green-400 font-semibold uppercase tracking-wider">Live Feed</span>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+        <h1 className="text-2xl font-bold text-white">Whale Transaction Monitor</h1>
+        <p className="text-gray-500 text-sm mt-1">
+          Real-time blockchain activity across ETH, BTC, SOL, ARB and more
+        </p>
+      </div>
+
+      {/* Stats */}
+      <StatsBar transactions={txs} />
+
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            className={`filter-pill ${chainFilter === 'ALL' ? 'active' : ''}`}
+            onClick={() => setChainFilter('ALL')}
+          >
+            All Chains
+          </button>
+          {CHAINS.map(c => (
+            <button
+              key={c}
+              className={`filter-pill ${chainFilter === c ? 'active' : ''}`}
+              onClick={() => setChainFilter(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1" />
+
+        <div className="flex items-center gap-1.5">
+          <Filter size={13} className="text-gray-500" />
+          {MIN_VALUES.map(v => (
+            <button
+              key={v.value}
+              className={`filter-pill ${minValue === v.value ? 'active' : ''}`}
+              onClick={() => setMinValue(v.value)}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => setPaused(p => !p)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+            paused
+              ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+              : 'bg-green-500/10 text-green-400 border-green-500/20'
+          }`}
         >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          {paused ? <><Play size={12} /> Resume</> : <><Pause size={12} /> Pause</>}
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs text-gray-500">
+          Showing <span className="text-white font-semibold">{filtered.length}</span> of {txs.length} transactions
+        </span>
+        <button
+          onClick={() => setTxs(generateInitialTransactions(50))}
+          className="text-xs text-gray-500 hover:text-cyan-400 transition-colors"
         >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          Reset feed
+        </button>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
+            <Filter size={20} className="text-gray-500" />
+          </div>
+          <p className="text-gray-400 font-medium">No transactions match your filters</p>
+          <p className="text-gray-600 text-sm mt-1">Try adjusting the chain or value filters</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(tx => (
+            <TransactionCard key={tx.id} tx={tx} onClick={setSelectedTx} />
+          ))}
+        </div>
+      )}
+
+      <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
     </div>
   );
 }

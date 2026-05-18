@@ -2,26 +2,216 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── TIDEMARK Design System ────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-primary: #080d18;
+  --bg-secondary: #0d1421;
+  --bg-tertiary: #111827;
+  --bg-hover: #1a2235;
+  --border: rgba(255, 255, 255, 0.06);
+  --border-accent: rgba(0, 212, 255, 0.25);
+  --accent: #00d4ff;
+  --accent-dark: #0099cc;
+  --green: #00d084;
+  --red: #ff4757;
+  --yellow: #ffd32a;
+  --text-primary: #e8eaf0;
+  --text-secondary: #8892a4;
+  --text-muted: #4a5568;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+/* ─── Ticker Bar ────────────────────────────────────────── */
+.ticker-bar {
+  @apply overflow-hidden border-b;
+  background: linear-gradient(90deg, #080d18 0%, #0d1421 50%, #080d18 100%);
+  border-color: rgba(0, 212, 255, 0.1);
+  height: 32px;
+  position: relative;
 }
+
+.ticker-bar::before,
+.ticker-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 60px;
+  height: 100%;
+  z-index: 1;
+}
+.ticker-bar::before {
+  left: 0;
+  background: linear-gradient(90deg, #080d18, transparent);
+}
+.ticker-bar::after {
+  right: 0;
+  background: linear-gradient(270deg, #080d18, transparent);
+}
+
+.ticker-track {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: ticker-scroll 50s linear infinite;
+  height: 100%;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
+
+.ticker-symbol { color: #ffffff; font-weight: 700; letter-spacing: 0.05em; }
+.ticker-price  { color: #8892a4; }
+.ticker-up     { color: #00d084; font-weight: 600; }
+.ticker-down   { color: #ff4757; font-weight: 600; }
+.ticker-sep    { color: rgba(255, 255, 255, 0.1); }
+
+/* ─── Cards ─────────────────────────────────────────────── */
+.stat-card {
+  @apply rounded-xl p-4;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  transition: border-color 0.2s;
+}
+.stat-card:hover { border-color: var(--border-accent); }
+
+.tx-card {
+  @apply rounded-xl p-4;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  transition: all 0.15s ease;
+}
+.tx-card:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 24px rgba(0, 212, 255, 0.05);
+}
+
+.chain-badge {
+  @apply px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wide;
+}
+
+/* ─── Buttons ────────────────────────────────────────────── */
+.btn-primary {
+  @apply px-4 py-2 rounded-lg text-sm font-semibold transition-all;
+  background: linear-gradient(135deg, #00d4ff, #0099cc);
+  color: #000;
+  border: none;
+}
+.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,212,255,0.3); }
+.btn-primary:disabled { opacity: 0.4; transform: none; }
+
+.btn-secondary {
+  @apply px-4 py-2 rounded-lg text-sm font-medium transition-all;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--border-accent); }
+
+/* ─── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+/* ─── Animations ─────────────────────────────────────────── */
+@keyframes slide-in {
+  from { transform: translateX(110%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes shrink {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-in { animation: slide-in 0.35s cubic-bezier(.21,1.02,.73,1) both; }
+.animate-shrink   { animation: shrink 8s linear forwards; }
+.animate-fade-in  { animation: fade-in 0.3s ease both; }
+
+/* ─── Modal ──────────────────────────────────────────────── */
+.modal-slide {
+  animation: modal-up 0.35s cubic-bezier(.21,1.02,.73,1) both;
+}
+@keyframes modal-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ─── Glow effects ───────────────────────────────────────── */
+.glow-cyan  { box-shadow: 0 0 20px rgba(0,212,255,0.15); }
+.glow-green { box-shadow: 0 0 20px rgba(0,208,132,0.15); }
+
+/* ─── Page Layout ────────────────────────────────────────── */
+.page-container {
+  @apply max-w-screen-2xl mx-auto px-4 py-6;
+}
+
+/* ─── Table ──────────────────────────────────────────────── */
+.data-table th {
+  @apply text-xs font-semibold uppercase tracking-wider text-gray-500 px-4 py-3 text-left;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td {
+  @apply px-4 py-3 text-sm text-gray-300;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* ─── Live dot indicator ─────────────────────────────────── */
+.live-dot {
+  @apply w-2 h-2 rounded-full bg-green-400 inline-block;
+  box-shadow: 0 0 6px rgba(0,208,132,0.6);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ─── Filter pills ───────────────────────────────────────── */
+.filter-pill {
+  @apply px-3 py-1.5 rounded-full text-xs font-medium transition-all border cursor-pointer;
+}
+.filter-pill.active {
+  background: rgba(0,212,255,0.15);
+  color: #00d4ff;
+  border-color: rgba(0,212,255,0.3);
+}
+.filter-pill:not(.active) {
+  background: transparent;
+  color: #8892a4;
+  border-color: rgba(255,255,255,0.06);
+}
+.filter-pill:not(.active):hover { color: white; border-color: rgba(255,255,255,0.15); }

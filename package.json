@@ -1,6 +1,6 @@
 {
-  "name": "project3",
-  "version": "0.1.0",
+  "name": "tidemark",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,13 +11,17 @@
   "dependencies": {
     "react": "^18",
     "react-dom": "^18",
-    "next": "14.2.35"
+    "next": "14.2.35",
+    "lucide-react": "^0.400.0",
+    "lightweight-charts": "^4.2.0",
+    "react-window": "^1.8.10"
   },
   "devDependencies": {
     "typescript": "^5",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/react-window": "^1.8.8",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "eslint": "^8",
