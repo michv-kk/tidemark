@@ -275,7 +275,7 @@ export default function AiInsightsPage() {
             <Brain size={32} className="mx-auto mb-3 text-purple-500/30" />
             <p className="text-sm">Click &quot;Analyze Feed&quot; to get AI-powered whale insights</p>
             <p className="text-xs text-gray-600 mt-1">
-              {isUsingFallback ? 'Using simulated data for analysis' : `${realTxCount} real transactions loaded`}
+              {isUsingFallback ? 'Live feeds unavailable — no data yet' : `${realTxCount} real transactions loaded`}
             </p>
           </div>
         )}

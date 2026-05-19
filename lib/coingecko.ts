@@ -1,8 +1,11 @@
 import { CoinData, GlobalMarketData, OHLCPoint } from './types';
 
-const BASE = 'https://api.coingecko.com/api/v3';
+// All CoinGecko requests are proxied through /api/coingecko to avoid
+// browser-side CORS blocks and rate limits on the free tier.
+const PROXY = '/api/coingecko';
+
 const CACHE = new Map<string, { data: unknown; ts: number }>();
-const TTL = 45_000; // 45s cache to avoid rate limits on free tier
+const TTL = 45_000; // 45s cache to avoid hammering the proxy
 
 let pendingRequests = new Map<string, Promise<unknown>>();
 
@@ -14,17 +17,20 @@ async function get<T>(path: string, ttl = TTL): Promise<T> {
   const existing = pendingRequests.get(path);
   if (existing) return existing as Promise<T>;
 
-  const req = fetch(`${BASE}${path}`, {
+  // Split path and query string so the proxy can forward them correctly
+  const [pathOnly, qs] = path.split('?');
+  const proxyUrl = `${PROXY}?path=${encodeURIComponent(pathOnly)}${qs ? '&' + qs : ''}`;
+
+  const req = fetch(proxyUrl, {
     headers: { Accept: 'application/json' },
   }).then(async res => {
     if (res.status === 429) {
-      // Rate limited — return cached data if available, else wait
+      // Rate limited — return cached data if available, else throw
       const stale = CACHE.get(path);
       if (stale) return stale.data;
-      await new Promise(r => setTimeout(r, 5000));
       throw new Error('Rate limited');
     }
-    if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
+    if (!res.ok) throw new Error(`CoinGecko proxy ${res.status}`);
     const data = await res.json();
     CACHE.set(path, { data, ts: Date.now() });
     return data;

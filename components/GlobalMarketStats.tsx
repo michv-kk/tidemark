@@ -6,10 +6,11 @@ import { TrendingUp, TrendingDown } from 'lucide-react';
 
 async function fetchGlobal(): Promise<GlobalMarketData | null> {
   try {
-    const res = await fetch('https://api.coingecko.com/api/v3/global', {
-      signal: AbortSignal.timeout(10000),
+    // Route through our server-side proxy to avoid CORS / rate-limit issues
+    const res = await fetch('/api/coingecko?path=/global', {
+      signal: AbortSignal.timeout(12000),
     });
-    if (!res.ok) throw new Error('failed');
+    if (!res.ok) throw new Error(`proxy ${res.status}`);
     const json = await res.json();
     return json.data ?? null;
   } catch {

@@ -66,7 +66,11 @@ async function fetchBlockTxs(blockHash: string, btcPrice: number): Promise<Trans
       const toAddr = tx.vout?.[0]?.scriptpubkey_address ?? 'unknown';
       const blockTime = tx.status?.block_time;
       const blockHeight = tx.status?.block_height ?? 0;
-      const timestamp = blockTime ? blockTime * 1000 : Date.now();
+
+      // All transactions fetched from confirmed blocks must have a real block_time.
+      // Skip any tx without it rather than falling back to a fabricated timestamp.
+      if (!blockTime) continue;
+      const timestamp = blockTime * 1000;
 
       results.push({
         id: `btc-${tx.txid}`,
