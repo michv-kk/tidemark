@@ -28,6 +28,23 @@ async function fetchCoins(): Promise<CoinData[]> {
   try { return await fetchTopCoins(50); } catch { return []; }
 }
 
+// Skeleton row for table loading state
+function TableSkeleton() {
+  return (
+    <div className="divide-y divide-white/5">
+      {Array(12).fill(0).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-3 animate-pulse">
+          <div className="w-6 h-3 bg-white/5 rounded" />
+          <div className="w-6 h-6 rounded-full bg-white/5" />
+          <div className="flex-1 h-3 bg-white/5 rounded w-24" />
+          <div className="ml-auto w-20 h-3 bg-white/5 rounded" />
+          <div className="w-12 h-3 bg-white/5 rounded" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function MarketsPage() {
   const [coins, setCoins] = useState<CoinData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +53,7 @@ export default function MarketsPage() {
 
   useEffect(() => {
     fetchCoins().then(c => { setCoins(c); setLoading(false); });
-    const id = setInterval(() => fetchCoins().then(setCoins), 60_000);
+    const id = setInterval(() => fetchCoins().then(c => { if (c.length > 0) setCoins(c); }), 120_000);
     return () => clearInterval(id);
   }, []);
 
@@ -111,7 +128,7 @@ export default function MarketsPage() {
               <h3 className="text-white font-semibold text-sm">All Markets</h3>
               {loading && <div className="w-4 h-4 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />}
             </div>
-            <div className="overflow-x-auto">
+            {loading ? <TableSkeleton /> : <div className="overflow-x-auto">
               <table className="w-full data-table">
                 <thead>
                   <tr>
@@ -149,7 +166,7 @@ export default function MarketsPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </div></div>}
           </div>
         </div>
       )}

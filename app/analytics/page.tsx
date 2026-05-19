@@ -169,8 +169,6 @@ function FearGreedPanel() {
 
 // ─── Gas Prices ───────────────────────────────────────────────────────────────
 
-const ETHERSCAN_KEY = 'NX35PINTFQXS4S542I3GA9I2G3DDZPV1FU';
-
 function GasPanel() {
   const [gas, setGas] = useState<GasOracle | null>(null);
   const [ethPrice, setEthPrice] = useState<number | null>(null);
@@ -181,31 +179,25 @@ function GasPanel() {
     let cancelled = false;
     async function load() {
       try {
-        const [gasRes, priceRes] = await Promise.allSettled([
-          fetch(`https://api.etherscan.io/v2/api?chainid=1&module=gastracker&action=gasoracle&apikey=${ETHERSCAN_KEY}`, { signal: AbortSignal.timeout(8000) }),
-          fetch('/api/coingecko?path=%2Fsimple%2Fprice&ids=ethereum&vs_currencies=usd', { signal: AbortSignal.timeout(8000) }),
-        ]);
+        // Use server-side /api/gas proxy — handles Etherscan + ETH price with caching
+        const res = await fetch('/api/gas', { signal: AbortSignal.timeout(12000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
 
-        if (gasRes.status === 'fulfilled' && gasRes.value.ok) {
-          const gd = await gasRes.value.json();
-          if (gd.status === '1' && gd.result) {
-            if (!cancelled) setGas(gd.result);
-          }
+        if (!cancelled) {
+          if (json.gas) setGas(json.gas);
+          if (typeof json.ethPrice === 'number') setEthPrice(json.ethPrice);
+          if (!json.gas) setError(true);
+          setLoading(false);
         }
-
-        if (priceRes.status === 'fulfilled' && priceRes.value.ok) {
-          const pd = await priceRes.value.json();
-          const p = pd?.ethereum?.usd;
-          if (!cancelled && typeof p === 'number') setEthPrice(p);
-        }
-
-        if (!cancelled) setLoading(false);
       } catch {
         if (!cancelled) { setError(true); setLoading(false); }
       }
     }
     load();
-    return () => { cancelled = true; };
+    // Refresh gas every 30s
+    const id = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
   if (loading) return <LoadingCard rows={5} />;

@@ -4,7 +4,14 @@ const CG_BASE = 'https://api.coingecko.com/api/v3';
 
 // Simple in-memory cache so repeated client requests don't hammer CoinGecko
 const cache = new Map<string, { data: unknown; ts: number }>();
-const TTL = 45_000; // 45s
+// Longer TTL for market data (slow-changing) vs price data (fast-changing)
+const TTL_MARKETS = 120_000; // 2 min for /coins/markets
+const TTL_DEFAULT = 45_000;  // 45s for everything else
+
+function getTTL(path: string): number {
+  if (path.startsWith('/coins/markets') || path.startsWith('/global')) return TTL_MARKETS;
+  return TTL_DEFAULT;
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -31,10 +38,23 @@ export async function GET(req: NextRequest) {
   const upstreamUrl = `${CG_BASE}${path}${upstreamParams.size > 0 ? '?' + upstreamParams.toString() : ''}`;
 
   const cacheKey = upstreamUrl;
+  const ttl = getTTL(path);
   const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < TTL) {
+  if (cached && Date.now() - cached.ts < ttl) {
     return NextResponse.json(cached.data, {
-      headers: { 'X-Cache': 'HIT', 'Cache-Control': 'public, max-age=30' },
+      headers: { 'X-Cache': 'HIT', 'Cache-Control': 'public, max-age=60' },
+    });
+  }
+
+  // Stale-while-revalidate: return stale immediately, refresh in background
+  if (cached) {
+    // Return stale data now, trigger background refresh
+    fetch(upstreamUrl, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) cache.set(cacheKey, { data, ts: Date.now() }); })
+      .catch(() => {});
+    return NextResponse.json(cached.data, {
+      headers: { 'X-Cache': 'STALE-REVALIDATE', 'Cache-Control': 'public, max-age=30' },
     });
   }
 
