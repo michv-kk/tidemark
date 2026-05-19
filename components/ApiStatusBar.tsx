@@ -29,7 +29,8 @@ async function checkDexScreener(): Promise<boolean> {
 
 async function checkCoinGecko(): Promise<boolean> {
   try {
-    const r = await fetch("https://api.coingecko.com/api/v3/ping", { signal: AbortSignal.timeout(5000) });
+    // Use proxy to avoid CORS blocks
+    const r = await fetch("/api/coingecko?path=%2Fping", { signal: AbortSignal.timeout(5000) });
     return r.ok;
   } catch { return false; }
 }

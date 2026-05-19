@@ -113,8 +113,9 @@ function useEthPrice() {
     let cancelled = false;
     async function fetchPrice() {
       try {
+        // Use proxy to avoid CORS blocks
         const res = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
+          '/api/coingecko?path=%2Fsimple%2Fprice&ids=ethereum&vs_currencies=usd',
           { signal: AbortSignal.timeout(5000) }
         );
         if (!res.ok) throw new Error('fetch failed');

@@ -183,7 +183,7 @@ function GasPanel() {
       try {
         const [gasRes, priceRes] = await Promise.allSettled([
           fetch(`https://api.etherscan.io/v2/api?chainid=1&module=gastracker&action=gasoracle&apikey=${ETHERSCAN_KEY}`, { signal: AbortSignal.timeout(8000) }),
-          fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', { signal: AbortSignal.timeout(8000) }),
+          fetch('/api/coingecko?path=%2Fsimple%2Fprice&ids=ethereum&vs_currencies=usd', { signal: AbortSignal.timeout(8000) }),
         ]);
 
         if (gasRes.status === 'fulfilled' && gasRes.value.ok) {
@@ -274,7 +274,7 @@ function TrendingPanel() {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch('https://api.coingecko.com/api/v3/search/trending', { signal: AbortSignal.timeout(8000) });
+        const res = await fetch('/api/coingecko?path=%2Fsearch%2Ftrending', { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error('bad response');
         const json = await res.json();
         if (!cancelled) {

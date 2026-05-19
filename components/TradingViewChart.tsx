@@ -18,8 +18,9 @@ const TIMEFRAMES = [
 
 async function fetchOHLC(coinId: string, days: number): Promise<OHLCPoint[]> {
   try {
+    // Use proxy to avoid CORS blocks
     const res = await fetch(
-      `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`
+      `/api/coingecko?path=%2Fcoins%2F${encodeURIComponent(coinId)}%2Fohlc&vs_currency=usd&days=${days}`
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw: [number, number, number, number, number][] = await res.json();

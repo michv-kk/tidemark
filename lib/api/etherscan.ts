@@ -60,8 +60,9 @@ interface TokenPrice { btc: number; eth: number; }
 
 async function getPrices(): Promise<TokenPrice> {
   try {
+    // Use proxy to avoid CORS blocks and share rate-limit budget
     const res = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd',
+      '/api/coingecko?path=%2Fsimple%2Fprice&ids=bitcoin%2Cethereum&vs_currencies=usd',
       { signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) return { btc: BTC_PRICE_FALLBACK, eth: ETH_PRICE_FALLBACK };

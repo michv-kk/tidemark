@@ -19,7 +19,8 @@ const NAV_LINKS = [
 async function searchCoins(q: string) {
   if (!q || q.length < 2) return [];
   try {
-    const res = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`);
+    // Use proxy to avoid CORS blocks
+    const res = await fetch(`/api/coingecko?path=%2Fsearch&query=${encodeURIComponent(q)}`);
     const data = await res.json();
     return (data.coins ?? []).slice(0, 5).map((c: { id: string; symbol: string; name: string; market_cap_rank: number }) => ({
       id: c.id, symbol: c.symbol.toUpperCase(), name: c.name, rank: c.market_cap_rank,

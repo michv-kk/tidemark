@@ -39,11 +39,17 @@ function TransactionCard({ tx, onClick }: Props) {
   const toLabel = lookupWallet(tx.to)?.label;
   const badge = getWhaleBadge(tx.value);
   const chainCls = CHAIN_COLORS[tx.chain] ?? 'bg-gray-500/20 text-gray-300 border-gray-500/30';
-  const etherscanBase = tx.chain === 'BTC'
-    ? 'https://mempool.space/tx/'
-    : tx.chain === 'SOL'
-    ? 'https://solscan.io/tx/'
-    : 'https://etherscan.io/tx/';
+  const EXPLORER_TX: Record<string, string> = {
+    ETH: 'https://etherscan.io/tx/',
+    BTC: 'https://mempool.space/tx/',
+    BSC: 'https://bscscan.com/tx/',
+    SOL: 'https://solscan.io/tx/',
+    ARB: 'https://arbiscan.io/tx/',
+    MATIC: 'https://polygonscan.com/tx/',
+    AVAX: 'https://snowtrace.io/tx/',
+    OP: 'https://optimistic.etherscan.io/tx/',
+  };
+  const etherscanBase = EXPLORER_TX[tx.chain] ?? 'https://etherscan.io/tx/';
 
   return (
     <div

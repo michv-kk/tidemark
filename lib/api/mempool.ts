@@ -33,8 +33,9 @@ interface MempoolBlock {
 
 async function getBtcPrice(): Promise<number> {
   try {
+    // Use proxy to avoid CORS blocks and share rate-limit budget
     const res = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
+      '/api/coingecko?path=%2Fsimple%2Fprice&ids=bitcoin&vs_currencies=usd',
       { signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) return BTC_PRICE_FALLBACK;

@@ -41,8 +41,9 @@ export async function fetchCryptoPrices(): Promise<CryptoPrices> {
 
   try {
     const ids = Object.values(COIN_IDS).join(',');
+    // Use the proxy to avoid CORS blocks and share rate-limit budget
     const res = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`,
+      `/api/coingecko?path=%2Fsimple%2Fprice&ids=${ids}&vs_currencies=usd`,
       { signal: AbortSignal.timeout(10000) }
     );
 

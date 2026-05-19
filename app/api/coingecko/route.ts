@@ -15,7 +15,8 @@ export async function GET(req: NextRequest) {
   }
 
   // Only allow known safe paths to prevent open proxy abuse
-  const ALLOWED_PREFIXES = ['/global', '/coins/markets', '/simple/price', '/coins/'];
+  const ALLOWED_PREFIXES = ['/global', '/coins/markets', '/simple/price', '/coins/', '/search', '/ping'];
+  // Note: '/search' prefix covers both /search?query=... and /search/trending
   const allowed = ALLOWED_PREFIXES.some(p => path.startsWith(p));
   if (!allowed) {
     return NextResponse.json({ error: 'Path not allowed' }, { status: 403 });
