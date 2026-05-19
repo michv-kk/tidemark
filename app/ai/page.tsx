@@ -254,10 +254,15 @@ export default function AiInsightsPage() {
         {/* Insight result */}
         {aiResult ? (
           <div className="space-y-3">
-            {aiResult.isMock && (
+            {aiResult.isMock ? (
               <div className="flex items-center gap-2 text-xs text-orange-400/80 bg-orange-400/10 border border-orange-400/20 rounded-lg px-3 py-2">
                 <AlertTriangle size={12} />
-                {aiResult.error ? 'AI service error — showing sample insight' : 'Demo mode — add ANTHROPIC_API_KEY for real AI analysis'}
+                {aiResult.error ? '⚠ Demo — AI service error, showing sample insight' : '⚠ Demo — add ANTHROPIC_API_KEY for live analysis'}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-green-400/80 bg-green-400/10 border border-green-400/20 rounded-lg px-3 py-2">
+                <Sparkles size={12} />
+                ✓ Powered by Claude · {aiResult.model}
               </div>
             )}
             <div className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">

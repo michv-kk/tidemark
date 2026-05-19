@@ -14,6 +14,7 @@ const NAV_LINKS = [
   { href: '/wallets', label: 'Wallets', icon: <Wallet size={14} /> },
   { href: '/ai', label: 'AI Insights', icon: <Sparkles size={14} /> },
   { href: '/analytics', label: 'Analytics', icon: <BarChart3 size={14} /> },
+  { href: '/derivatives', label: 'Derivatives', icon: <TrendingUp size={14} /> },
 ];
 
 async function searchCoins(q: string) {
