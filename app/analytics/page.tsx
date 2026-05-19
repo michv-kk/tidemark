@@ -366,90 +366,54 @@ function ChainActivityPanel() {
 
 // ─── Exchange Flows ────────────────────────────────────────────────────────────
 
-interface ExchangeFlow {
-  name: string;
-  address: string;
-  color: string;
-  initials: string;
-}
-
 interface FlowResult {
   name: string;
   color: string;
   initials: string;
-  netFlowETH: number;
+  netEth: number | null;
   txCount: number;
-  loaded: boolean;
-  error: boolean;
-}
-
-const EXCHANGES: ExchangeFlow[] = [
-  { name: 'Binance', address: '0x28C6c06298d514Db089934071355E5743bf21d60', color: 'bg-yellow-500', initials: 'BN' },
-  { name: 'Coinbase', address: '0x503828976D22510aad0201ac7EC88293211D23Da', color: 'bg-blue-500', initials: 'CB' },
-  { name: 'Kraken',   address: '0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2', color: 'bg-purple-500', initials: 'KR' },
-];
-
-const ETHERSCAN_KEY_FLOWS = 'NX35PINTFQXS4S542I3GA9I2G3DDZPV1FU';
-const ONE_DAY_MS = 86400000;
-
-async function fetchExchangeFlow(exchange: ExchangeFlow): Promise<FlowResult> {
-  try {
-    const url = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${exchange.address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=${ETHERSCAN_KEY_FLOWS}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.status !== '1' || !Array.isArray(data.result)) {
-      return { name: exchange.name, color: exchange.color, initials: exchange.initials, netFlowETH: 0, txCount: 0, loaded: true, error: true };
-    }
-    const cutoff = Date.now() - ONE_DAY_MS;
-    const recent = data.result.filter((tx: { timeStamp: string }) => parseInt(tx.timeStamp, 10) * 1000 >= cutoff);
-    let inflow = 0;
-    let outflow = 0;
-    const addrLower = exchange.address.toLowerCase();
-    for (const tx of recent) {
-      const val = parseInt(tx.value, 10) / 1e18;
-      if (tx.to?.toLowerCase() === addrLower) inflow += val;
-      if (tx.from?.toLowerCase() === addrLower) outflow += val;
-    }
-    return {
-      name: exchange.name, color: exchange.color, initials: exchange.initials,
-      netFlowETH: inflow - outflow, txCount: recent.length, loaded: true, error: false,
-    };
-  } catch {
-    return { name: exchange.name, color: exchange.color, initials: exchange.initials, netFlowETH: 0, txCount: 0, loaded: true, error: true };
-  }
+  inEth: number;
+  outEth: number;
 }
 
 function ExchangeFlowsPanel() {
-  const [flows, setFlows] = useState<FlowResult[]>(
-    EXCHANGES.map(e => ({ name: e.name, color: e.color, initials: e.initials, netFlowETH: 0, txCount: 0, loaded: false, error: false }))
-  );
+  const [flows, setFlows] = useState<FlowResult[] | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const results = await Promise.all(EXCHANGES.map(fetchExchangeFlow));
-      if (!cancelled) setFlows(results);
+      try {
+        const res = await fetch('/api/exchange-flows', { signal: AbortSignal.timeout(20000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data: FlowResult[] = await res.json();
+        if (!cancelled) { setFlows(data); setLoading(false); }
+      } catch {
+        if (!cancelled) { setFlows([]); setLoading(false); }
+      }
     }
     load();
     return () => { cancelled = true; };
   }, []);
 
-  const allLoading = flows.every(f => !f.loaded);
-
-  if (allLoading) return <LoadingCard rows={4} />;
+  if (loading) return <LoadingCard rows={4} />;
+  if (!flows || flows.length === 0) return <Card><p className="text-orange-400 text-sm">Unable to load exchange flow data</p></Card>;
 
   return (
     <Card>
       <div className="space-y-4">
         {flows.map(flow => {
-          const isInflow = flow.netFlowETH > 0;
-          const isOutflow = flow.netFlowETH < 0;
+          const isInflow = flow.netEth !== null && flow.netEth > 0;
+          const isOutflow = flow.netEth !== null && flow.netEth < 0;
+          const hasData = flow.netEth !== null;
 
           return (
             <div key={flow.name} className="flex items-center gap-3">
               {/* Exchange icon */}
-              <div className={`w-8 h-8 rounded-lg ${flow.color} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                style={{ backgroundColor: flow.color }}
+              >
                 {flow.initials}
               </div>
 
@@ -457,21 +421,23 @@ function ExchangeFlowsPanel() {
               <div className="flex-1 min-w-0">
                 <div className="text-white text-sm font-semibold">{flow.name}</div>
                 <div className="text-gray-500 text-xs">
-                  {flow.error ? 'Data unavailable' : `${flow.txCount} txs in 24h`}
+                  {!hasData ? 'Data unavailable' : `${flow.txCount} txs in 24h`}
                 </div>
               </div>
 
-              {/* Flow amount + arrow */}
-              {flow.error ? (
+              {/* Flow amount + label */}
+              {!hasData ? (
                 <span className="text-gray-500 text-sm font-mono">—</span>
               ) : (
                 <div className="text-right flex items-center gap-2 flex-shrink-0">
                   <div>
                     <div className={`text-sm font-bold font-mono tabular-nums ${isInflow ? 'text-red-400' : isOutflow ? 'text-green-400' : 'text-gray-400'}`}>
-                      {flow.netFlowETH === 0 ? '0.000 ETH' : `${isInflow ? '+' : ''}${flow.netFlowETH.toFixed(3)} ETH`}
+                      {flow.netEth === 0
+                        ? '0 ETH'
+                        : `${isInflow ? '+' : ''}${flow.netEth!.toLocaleString(undefined, { maximumFractionDigits: 1 })} ETH`}
                     </div>
                     <div className={`text-xs text-right ${isInflow ? 'text-red-400/70' : isOutflow ? 'text-green-400/70' : 'text-gray-500'}`}>
-                      {isInflow ? '↑ Inflow (bearish)' : isOutflow ? '↓ Outflow (bullish)' : 'Neutral'}
+                      {isInflow ? 'Inflow ↑ bearish' : isOutflow ? 'Outflow ↓ bullish' : 'Neutral'}
                     </div>
                   </div>
                   {isInflow ? (
@@ -488,7 +454,7 @@ function ExchangeFlowsPanel() {
         })}
       </div>
       <div className="mt-4 pt-3 border-t border-white/5 text-xs text-gray-600">
-        Net ETH flow last 24h via Etherscan · Inflow ↑ = more deposits (bearish) · Outflow ↓ = withdrawals (bullish)
+        Net ETH flow last 24h · Inflow ↑ = more deposits (bearish) · Outflow ↓ = withdrawals (bullish)
       </div>
     </Card>
   );

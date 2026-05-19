@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, Search, Settings, X, Wallet, TrendingUp, LayoutDashboard, BarChart2, Sparkles, BarChart3 } from 'lucide-react';
+import { Bell, Search, Settings, X, Wallet, TrendingUp, LayoutDashboard, BarChart2, Sparkles, BarChart3, BookOpen } from 'lucide-react';
 import { useAlerts } from '@/contexts/AlertsContext';
 import { formatTimeAgo } from '@/lib/formatters';
 import { ApiStatusBar } from '@/components/ApiStatusBar';
@@ -15,6 +15,7 @@ const NAV_LINKS = [
   { href: '/ai', label: 'AI Insights', icon: <Sparkles size={14} /> },
   { href: '/analytics', label: 'Analytics', icon: <BarChart3 size={14} /> },
   { href: '/derivatives', label: 'Derivatives', icon: <TrendingUp size={14} /> },
+  { href: '/about', label: 'About', icon: <BookOpen size={14} /> },
 ];
 
 async function searchCoins(q: string) {
