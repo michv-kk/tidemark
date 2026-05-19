@@ -173,35 +173,50 @@ function GasPanel() {
   const [gas, setGas] = useState<GasOracle | null>(null);
   const [ethPrice, setEthPrice] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const load = async (isRetry = false) => {
+    if (isRetry) setRetrying(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/gas', { signal: AbortSignal.timeout(15000) });
+      const json = await res.json();
+      if (json.gas) {
+        setGas(json.gas);
+        setErrorMsg(null);
+      } else {
+        setErrorMsg(json.gasError ?? 'Gas data unavailable');
+      }
+      if (typeof json.ethPrice === 'number') setEthPrice(json.ethPrice);
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setLoading(false);
+      setRetrying(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        // Use server-side /api/gas proxy — handles Etherscan + ETH price with caching
-        const res = await fetch('/api/gas', { signal: AbortSignal.timeout(12000) });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-
-        if (!cancelled) {
-          if (json.gas) setGas(json.gas);
-          if (typeof json.ethPrice === 'number') setEthPrice(json.ethPrice);
-          if (!json.gas) setError(true);
-          setLoading(false);
-        }
-      } catch {
-        if (!cancelled) { setError(true); setLoading(false); }
-      }
-    }
     load();
-    // Refresh gas every 30s
-    const id = setInterval(load, 30_000);
-    return () => { cancelled = true; clearInterval(id); };
+    const id = setInterval(() => load(), 30_000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) return <LoadingCard rows={5} />;
-  if (error || !gas) return <Card><p className="text-orange-400 text-sm">Unable to load gas data</p></Card>;
+  if (!gas) return (
+    <Card>
+      <p className="text-orange-400 text-sm mb-3">⚠ {errorMsg ?? 'Gas data unavailable'}</p>
+      <button
+        onClick={() => load(true)}
+        disabled={retrying}
+        className="text-xs text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded hover:bg-cyan-500/10 transition-colors disabled:opacity-50"
+      >
+        {retrying ? 'Retrying…' : 'Retry'}
+      </button>
+    </Card>
+  );
 
   const safeGwei = parseFloat(gas.SafeGasPrice);
   const proposeGwei = parseFloat(gas.ProposeGasPrice);
