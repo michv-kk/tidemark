@@ -76,27 +76,29 @@ export async function fetchTickerData(): Promise<{ symbol: string; price: number
   }
 }
 
+// Fallback prices — only used if ALL CoinGecko requests fail (shown briefly)
+// Updated: May 2025
 const FALLBACK_TICKER = [
-  { symbol: 'BTC', price: 67500, change: 2.34 },
-  { symbol: 'ETH', price: 3420, change: 1.87 },
-  { symbol: 'BNB', price: 580, change: -0.54 },
-  { symbol: 'SOL', price: 148, change: 3.21 },
-  { symbol: 'XRP', price: 0.62, change: -1.23 },
-  { symbol: 'ADA', price: 0.48, change: 0.87 },
-  { symbol: 'DOGE', price: 0.155, change: 5.43 },
-  { symbol: 'AVAX', price: 34, change: -2.11 },
-  { symbol: 'LINK', price: 14.5, change: 1.34 },
-  { symbol: 'MATIC', price: 0.72, change: -0.98 },
-  { symbol: 'UNI', price: 7.8, change: 0.67 },
-  { symbol: 'ARB', price: 1.1, change: 2.45 },
-  { symbol: 'OP', price: 1.8, change: 3.12 },
-  { symbol: 'ATOM', price: 8.9, change: -1.56 },
-  { symbol: 'NEAR', price: 5.6, change: 4.23 },
-  { symbol: 'APT', price: 9.2, change: -0.34 },
-  { symbol: 'INJ', price: 22, change: 6.78 },
-  { symbol: 'TIA', price: 12, change: -3.21 },
-  { symbol: 'SEI', price: 0.54, change: 2.10 },
-  { symbol: 'WLD', price: 4.3, change: -1.87 },
+  { symbol: 'BTC', price: 77000, change: 0 },
+  { symbol: 'ETH', price: 2100, change: 0 },
+  { symbol: 'BNB', price: 640, change: 0 },
+  { symbol: 'SOL', price: 170, change: 0 },
+  { symbol: 'XRP', price: 2.3, change: 0 },
+  { symbol: 'ADA', price: 0.73, change: 0 },
+  { symbol: 'DOGE', price: 0.21, change: 0 },
+  { symbol: 'AVAX', price: 23, change: 0 },
+  { symbol: 'LINK', price: 14, change: 0 },
+  { symbol: 'POL', price: 0.25, change: 0 },
+  { symbol: 'UNI', price: 6.5, change: 0 },
+  { symbol: 'ARB', price: 0.42, change: 0 },
+  { symbol: 'OP', price: 0.9, change: 0 },
+  { symbol: 'ATOM', price: 5.5, change: 0 },
+  { symbol: 'NEAR', price: 3.1, change: 0 },
+  { symbol: 'APT', price: 6.8, change: 0 },
+  { symbol: 'SUI', price: 3.8, change: 0 },
+  { symbol: 'TIA', price: 3.2, change: 0 },
+  { symbol: 'INJ', price: 10, change: 0 },
+  { symbol: 'TON', price: 3.1, change: 0 },
 ];
 
 export { FALLBACK_TICKER };

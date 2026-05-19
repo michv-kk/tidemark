@@ -40,7 +40,7 @@ function TransactionCard({ tx, onClick }: Props) {
   const badge = getWhaleBadge(tx.value);
   const chainCls = CHAIN_COLORS[tx.chain] ?? 'bg-gray-500/20 text-gray-300 border-gray-500/30';
   const etherscanBase = tx.chain === 'BTC'
-    ? 'https://blockstream.info/tx/'
+    ? 'https://mempool.space/tx/'
     : tx.chain === 'SOL'
     ? 'https://solscan.io/tx/'
     : 'https://etherscan.io/tx/';

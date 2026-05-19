@@ -2,14 +2,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, Search, Settings, X, Wallet, TrendingUp, LayoutDashboard } from 'lucide-react';
+import { Bell, Search, Settings, X, Wallet, TrendingUp, LayoutDashboard, BarChart2, Sparkles, BarChart3 } from 'lucide-react';
 import { useAlerts } from '@/contexts/AlertsContext';
 import { formatTimeAgo } from '@/lib/formatters';
+import { ApiStatusBar } from '@/components/ApiStatusBar';
 
 const NAV_LINKS = [
   { href: '/', label: 'Dashboard', icon: <LayoutDashboard size={14} /> },
   { href: '/markets', label: 'Markets', icon: <TrendingUp size={14} /> },
+  { href: '/prices', label: 'Prices', icon: <BarChart2 size={14} /> },
   { href: '/wallets', label: 'Wallets', icon: <Wallet size={14} /> },
+  { href: '/ai', label: 'AI Insights', icon: <Sparkles size={14} /> },
+  { href: '/analytics', label: 'Analytics', icon: <BarChart3 size={14} /> },
 ];
 
 async function searchCoins(q: string) {
@@ -112,6 +116,10 @@ export default function Navbar() {
 
         {/* Right actions */}
         <div className="flex items-center gap-2">
+          {/* API status */}
+          <div className="hidden sm:block">
+            <ApiStatusBar />
+          </div>
           {/* Search trigger */}
           <button
             onClick={openSearch}

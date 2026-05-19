@@ -1,13 +1,36 @@
 'use client';
 import React, { useMemo } from 'react';
-import { Transaction } from '@/lib/types';
+import { Transaction, ChainId } from '@/lib/types';
 import { formatUSD } from '@/lib/formatters';
-import { calcTotalVolume, calcMaxTransaction, calcActiveChains, calcTransactionsPerMinute } from '@/lib/transactionGenerator';
-import { TrendingUp, Zap, Activity, Layers } from 'lucide-react';
+import { TrendingUp, Zap, Activity, Layers, Radio } from 'lucide-react';
 
-interface Props { transactions: Transaction[] }
+interface Props {
+  transactions: Transaction[];
+  isLive?: boolean;
+  isLoading?: boolean;
+}
 
-export default function StatsBar({ transactions }: Props) {
+function calcTotalVolume(txs: Transaction[]): number {
+  return txs.reduce((sum, t) => sum + t.value, 0);
+}
+
+function calcMaxTransaction(txs: Transaction[]): Transaction | null {
+  if (txs.length === 0) return null;
+  return txs.reduce((max, t) => (t.value > max.value ? t : max), txs[0]);
+}
+
+function calcActiveChains(txs: Transaction[]): ChainId[] {
+  const oneHourAgo = Date.now() - 3_600_000;
+  const active = new Set(txs.filter(t => t.timestamp > oneHourAgo).map(t => t.chain));
+  return Array.from(active) as ChainId[];
+}
+
+function calcTransactionsPerMinute(txs: Transaction[]): number {
+  const oneMinAgo = Date.now() - 60_000;
+  return txs.filter(t => t.timestamp > oneMinAgo).length;
+}
+
+export default function StatsBar({ transactions, isLive, isLoading }: Props) {
   const stats = useMemo(() => ({
     volume: calcTotalVolume(transactions),
     maxTx: calcMaxTransaction(transactions),
@@ -38,9 +61,31 @@ export default function StatsBar({ transactions }: Props) {
       icon: <Activity size={18} className="text-green-400" />,
       label: 'TX / Minute',
       value: `${stats.txPerMin}`,
-      sub: 'Live rate',
+      sub: isLive ? (
+        <span className="flex items-center gap-1 text-green-400">
+          <Radio size={9} />
+          Live rate
+        </span>
+      ) : 'Live rate',
     },
   ];
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        {Array(4).fill(0).map((_, i) => (
+          <div key={i} className="stat-card animate-pulse">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-4 h-4 rounded bg-white/5" />
+              <div className="h-3 bg-white/5 rounded w-24" />
+            </div>
+            <div className="h-8 bg-white/5 rounded w-28 mb-1" />
+            <div className="h-3 bg-white/5 rounded w-20" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">

@@ -1,9 +1,9 @@
 'use client';
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { Transaction } from '@/lib/types';
 import { formatUSD, formatTimestamp, formatTokenAmount, formatNumber } from '@/lib/formatters';
 import { lookupWallet } from '@/lib/knownWallets';
-import { X, Copy, ExternalLink, Wallet } from 'lucide-react';
+import { X, Copy, ExternalLink, Wallet, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface Props {
@@ -38,7 +38,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const EXPLORER_URLS: Record<string, string> = {
   ETH: 'https://etherscan.io/tx/',
-  BTC: 'https://blockstream.info/tx/',
+  BTC: 'https://mempool.space/tx/',
   BSC: 'https://bscscan.com/tx/',
   SOL: 'https://solscan.io/tx/',
   ARB: 'https://arbiscan.io/tx/',
@@ -49,7 +49,7 @@ const EXPLORER_URLS: Record<string, string> = {
 
 const ADDR_EXPLORERS: Record<string, string> = {
   ETH: 'https://etherscan.io/address/',
-  BTC: 'https://blockstream.info/address/',
+  BTC: 'https://mempool.space/address/',
   BSC: 'https://bscscan.com/address/',
   SOL: 'https://solscan.io/account/',
   ARB: 'https://arbiscan.io/address/',
@@ -58,33 +58,90 @@ const ADDR_EXPLORERS: Record<string, string> = {
   OP: 'https://optimistic.etherscan.io/address/',
 };
 
-const AI_INSIGHTS: Record<string, string[]> = {
-  transfer: [
-    'Large transfer detected. Destination analysis suggests possible exchange deposit — potential sell pressure in 1-4 hours.',
-    'On-chain pattern matches institutional cold storage movement. Likely long-term holder activity.',
-    'Transfer destination is a known DeFi protocol. Funds likely being deployed for yield or liquidity provision.',
-  ],
-  swap: [
-    'Large swap executed. Slippage pattern indicates urgent liquidation or rebalancing event.',
-    'Swap routing through multiple DEX pools suggests sophisticated MEV-aware execution.',
-    'Token swap size exceeds daily average by 340x. Possible market-moving event.',
-  ],
-  bridge: [
-    'Cross-chain bridge transaction detected. Funds moving from mainnet suggests L2 ecosystem activity shift.',
-    'Bridge movement at this scale often precedes increased DEX activity on destination chain.',
-  ],
-  stake: ['Staking event reduces circulating supply. Bullish signal for short-term price action.'],
-  unstake: ['Unstaking event may signal intent to sell. Monitor closely for follow-up transfer to exchange.'],
-  liquidation: ['⚡ Liquidation event detected. DeFi health indicator — watch for cascading liquidations if price continues.'],
-};
+const EXCHANGES = ['Binance', 'Coinbase', 'Kraken', 'OKX', 'Bybit', 'Huobi', 'Bitfinex'];
 
-function getInsight(type: string): string {
-  const insights = AI_INSIGHTS[type] ?? AI_INSIGHTS.transfer;
-  return insights[Math.floor(Math.random() * insights.length)];
+function getQuickAnalysis(tx: Transaction, fromLabel?: string, toLabel?: string): string {
+  const token = tx.token?.toUpperCase() ?? '';
+  const from = fromLabel ?? '';
+  const to = toLabel ?? '';
+
+  // Stablecoins
+  if (token === 'USDC' || token === 'USDT' || token === 'DAI' || token === 'BUSD') {
+    return 'Stablecoin transfer — likely exchange deposit/withdrawal or OTC settlement';
+  }
+
+  // Wrapped BTC
+  if (token === 'WBTC') {
+    return 'Wrapped Bitcoin transfer — BTC equivalent moving on Ethereum';
+  }
+
+  // Native ETH
+  if (token === 'ETH') {
+    return 'Native ETH transfer';
+  }
+
+  // Exchange outflow
+  const outExchange = EXCHANGES.find(e => from.includes(e));
+  if (outExchange) {
+    return `Exchange outflow — withdrawal from ${outExchange}`;
+  }
+
+  // Exchange inflow
+  const inExchange = EXCHANGES.find(e => to.includes(e));
+  if (inExchange) {
+    return `Exchange inflow — deposit to ${inExchange}`;
+  }
+
+  // Mega whale
+  if (tx.value >= 10_000_000) {
+    return 'Mega whale move — top 0.01% transaction size';
+  }
+
+  // Whale tier
+  if (tx.value >= 1_000_000) {
+    return 'Whale-tier transaction — institutional or large holder activity';
+  }
+
+  return `${tx.type.charAt(0).toUpperCase() + tx.type.slice(1)} transaction on ${tx.chain}`;
+}
+
+function useEthPrice() {
+  const [price, setPrice] = useState<number | null>(null);
+  const [estimated, setEstimated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchPrice() {
+      try {
+        const res = await fetch(
+          'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (!res.ok) throw new Error('fetch failed');
+        const data = await res.json();
+        const p = data?.ethereum?.usd;
+        if (!cancelled && typeof p === 'number') {
+          setPrice(p);
+          setEstimated(false);
+        }
+      } catch {
+        if (!cancelled) {
+          // Fallback to a conservative estimate and flag it
+          setPrice(3400);
+          setEstimated(true);
+        }
+      }
+    }
+    fetchPrice();
+    return () => { cancelled = true; };
+  }, []);
+
+  return { price, estimated };
 }
 
 export default function TransactionModal({ tx, onClose }: Props) {
   const router = useRouter();
+  const { price: ethPrice, estimated: ethPriceEstimated } = useEthPrice();
 
   const handleClose = useCallback(() => onClose(), [onClose]);
 
@@ -98,9 +155,19 @@ export default function TransactionModal({ tx, onClose }: Props) {
 
   const fromWallet = lookupWallet(tx.from);
   const toWallet = lookupWallet(tx.to);
-  const explorerTx = (EXPLORER_URLS[tx.chain] ?? EXPLORER_URLS.ETH) + tx.hash;
+
+  // DexScreener entries use pair addresses as hash — link to DexScreener instead of block explorer
+  const explorerTx = tx.source === 'dexscreener'
+    ? `https://dexscreener.com/ethereum/${tx.hash}`
+    : (EXPLORER_URLS[tx.chain] ?? EXPLORER_URLS.ETH) + tx.hash;
+
   const addrBase = ADDR_EXPLORERS[tx.chain] ?? ADDR_EXPLORERS.ETH;
-  const insight = getInsight(tx.type);
+
+  const quickAnalysis = getQuickAnalysis(tx, fromWallet?.label, toWallet?.label);
+
+  const gasFeeUSD = tx.gasUsed && tx.gasPrice && ethPrice != null
+    ? (tx.gasUsed * tx.gasPrice * 1e-9) * ethPrice
+    : null;
 
   return (
     <div
@@ -166,18 +233,36 @@ export default function TransactionModal({ tx, onClose }: Props) {
           {tx.gasPrice && <Row label="Gas Price"><span>{tx.gasPrice.toFixed(2)} gwei</span></Row>}
           {tx.gasUsed && tx.gasPrice && (
             <Row label="Gas Fee">
-              <span className="text-yellow-400">${((tx.gasUsed * tx.gasPrice * 1e-9) * 3420).toFixed(4)}</span>
+              {gasFeeUSD != null ? (
+                <span className="text-yellow-400">
+                  {ethPriceEstimated ? '~' : ''}${gasFeeUSD.toFixed(4)}
+                  {ethPriceEstimated && <span className="text-gray-500 text-xs ml-1">(est.)</span>}
+                </span>
+              ) : (
+                <span className="text-gray-500 flex items-center gap-1">
+                  <Loader2 size={10} className="animate-spin" /> calculating...
+                </span>
+              )}
             </Row>
           )}
         </div>
 
-        {/* AI Insight */}
-        <div className="bg-gradient-to-r from-purple-950/40 to-indigo-950/40 border border-purple-500/20 rounded-xl p-4 mb-5">
+        {/* Quick Analysis */}
+        <div className="bg-gradient-to-r from-slate-950/60 to-gray-950/60 border border-white/10 rounded-xl p-4 mb-5">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
-            <span className="text-purple-300 text-xs font-semibold uppercase tracking-wide">AI Insight</span>
+            <div className="w-2 h-2 bg-cyan-400 rounded-full" />
+            <span className="text-cyan-300 text-xs font-semibold uppercase tracking-wide">Quick Analysis</span>
           </div>
-          <p className="text-gray-300 text-sm leading-relaxed">{insight}</p>
+          <p className="text-gray-300 text-sm leading-relaxed mb-3">{quickAnalysis}</p>
+          <a
+            href={explorerTx}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 transition-colors border border-cyan-500/20 rounded-lg px-2.5 py-1.5 bg-cyan-500/5 hover:bg-cyan-500/10"
+          >
+            <ExternalLink size={11} />
+            {tx.source === 'dexscreener' ? 'View on DexScreener' : tx.chain === 'BTC' ? 'View on Mempool.space' : 'View on Block Explorer'}
+          </a>
         </div>
 
         {/* Actions */}

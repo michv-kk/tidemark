@@ -17,6 +17,8 @@ export interface Transaction {
   gasPrice?: number;
   type: TxType;
   isWhale: boolean;
+  source?: 'etherscan' | 'mempool' | 'dexscreener' | 'generated';
+  aiInsight?: string;
 }
 
 export interface KnownWallet {

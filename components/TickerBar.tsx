@@ -29,13 +29,30 @@ function formatPrice(p: number): string {
 }
 
 export default function TickerBar() {
-  const [items, setItems] = useState<TickerItem[]>(FALLBACK_TICKER);
+  // Start empty — never flash stale hardcoded prices
+  const [items, setItems] = useState<TickerItem[]>([]);
 
   useEffect(() => {
     loadTicker().then(setItems);
     const id = setInterval(() => loadTicker().then(setItems), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // Show a subtle loading state until real data arrives
+  if (items.length === 0) {
+    return (
+      <div className="ticker-bar">
+        <div className="flex items-center justify-center gap-6 px-4 h-full">
+          {['BTC', 'ETH', 'BNB', 'SOL', 'XRP'].map(s => (
+            <span key={s} className="ticker-item">
+              <span className="ticker-symbol">{s}</span>
+              <span className="inline-block w-16 h-3 bg-white/5 rounded animate-pulse ml-1" />
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const doubled = [...items, ...items];
 

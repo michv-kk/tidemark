@@ -2,13 +2,27 @@
 import React, { useEffect, useState } from 'react';
 import GlobalMarketStats from '@/components/GlobalMarketStats';
 import MarketHeatmap from '@/components/MarketHeatmap';
-import TradingViewChart from '@/components/TradingViewChart';
+import { TradingViewWidget } from '@/components/TradingViewWidget';
 import { CoinData } from '@/lib/types';
 import { formatUSD, formatPercent, getChangeColor } from '@/lib/formatters';
 import { fetchTopCoins } from '@/lib/coingecko';
 import Image from 'next/image';
 
 const TOP_PAIRS = ['BTC', 'ETH', 'SOL', 'BNB', 'ARB', 'AVAX', 'MATIC', 'LINK', 'UNI', 'OP'];
+
+// Map coin symbols to full TradingView symbols (Binance pairs)
+const TV_SYMBOL: Record<string, string> = {
+  BTC: 'BINANCE:BTCUSDT',
+  ETH: 'BINANCE:ETHUSDT',
+  SOL: 'BINANCE:SOLUSDT',
+  BNB: 'BINANCE:BNBUSDT',
+  ARB: 'BINANCE:ARBUSDT',
+  AVAX: 'BINANCE:AVAXUSDT',
+  MATIC: 'BINANCE:MATICUSDT',
+  LINK: 'BINANCE:LINKUSDT',
+  UNI: 'BINANCE:UNIUSDT',
+  OP: 'BINANCE:OPUSDT',
+};
 
 async function fetchCoins(): Promise<CoinData[]> {
   try { return await fetchTopCoins(50); } catch { return []; }
@@ -158,7 +172,11 @@ export default function MarketsPage() {
               </button>
             ))}
           </div>
-          <TradingViewChart symbol={selectedPair} height={400} />
+          <TradingViewWidget
+            symbol={TV_SYMBOL[selectedPair] ?? `BINANCE:${selectedPair}USDT`}
+            height={520}
+            interval="D"
+          />
 
           {/* Info cards row */}
           {coins.length > 0 && (() => {
