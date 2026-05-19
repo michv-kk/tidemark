@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Transaction } from '@/lib/types';
 
+export const maxDuration = 30; // Allow Claude API enough time on Vercel Pro
+
 const MOCK_INSIGHTS = [
   'Large ETH accumulation detected across multiple whale wallets. 3 addresses have been consistently buying dips — potential institutional positioning ahead of a catalyst.',
   'BTC on-chain data shows record exchange outflows. Whales moving funds to cold storage is historically bullish. Watch for reduced sell pressure in coming sessions.',

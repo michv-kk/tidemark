@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const maxDuration = 25;
+
 const ETHERSCAN_KEY = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY ?? '';
 
 const EXCHANGES = [
@@ -8,21 +10,26 @@ const EXCHANGES = [
   { name: 'Kraken',   address: '0x2910543Af39abA0Cd09dBb2D50200b3E800A63D2', color: '#8B5CF6', initials: 'KR' },
 ];
 
-// Cache for 60 seconds
-let cache: { data: unknown; ts: number } | null = null;
+type Tx = { timeStamp: string; to: string; from: string; value: string; isError: string };
 
 async function fetchFlowForExchange(exchange: typeof EXCHANGES[0]) {
-  const url = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist&address=${exchange.address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=${ETHERSCAN_KEY}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  const url = `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist` +
+    `&address=${exchange.address}&page=1&offset=100&sort=desc` +
+    `&apikey=${ETHERSCAN_KEY}`;
+
+  // next: revalidate uses Vercel Data Cache — persists across cold starts
+  const res = await fetch(url, { next: { revalidate: 60 } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
   const data = await res.json();
   if (data.status !== '1' || !Array.isArray(data.result)) {
     throw new Error(data.message ?? 'Bad response');
   }
 
-  const cutoff = Date.now() / 1000 - 86400;
-  const recent = (data.result as Array<{ timeStamp: string; to: string; from: string; value: string }>)
-    .filter(tx => parseInt(tx.timeStamp, 10) > cutoff);
+  const cutoff = Math.floor(Date.now() / 1000) - 86_400;
+  const recent = (data.result as Tx[]).filter(
+    tx => parseInt(tx.timeStamp, 10) > cutoff && tx.isError === '0'
+  );
 
   let inEth = 0;
   let outEth = 0;
@@ -46,37 +53,28 @@ async function fetchFlowForExchange(exchange: typeof EXCHANGES[0]) {
 }
 
 export async function GET() {
-  // Serve from cache if fresh
-  if (cache && Date.now() - cache.ts < 60_000) {
-    return NextResponse.json(cache.data);
-  }
+  // Parallel fetches — Vercel Data Cache means repeated calls within 60s
+  // return instantly without hitting Etherscan, no rate-limit risk
+  const results = await Promise.allSettled(
+    EXCHANGES.map(ex => fetchFlowForExchange(ex))
+  );
 
-  try {
-    // Fetch sequentially to avoid rate-limiting (3 req/sec on Etherscan)
-    const results = [];
-    for (const exchange of EXCHANGES) {
-      try {
-        const flow = await fetchFlowForExchange(exchange);
-        results.push(flow);
-      } catch {
-        results.push({
-          name: exchange.name,
-          color: exchange.color,
-          initials: exchange.initials,
-          netEth: null,
-          txCount: 0,
-          inEth: 0,
-          outEth: 0,
-        });
-      }
-    }
+  const flows = results.map((r, i) => {
+    if (r.status === 'fulfilled') return r.value;
+    console.warn(`[exchange-flows] ${EXCHANGES[i].name} failed:`, (r.reason as Error).message);
+    return {
+      name: EXCHANGES[i].name,
+      color: EXCHANGES[i].color,
+      initials: EXCHANGES[i].initials,
+      netEth: null as number | null,
+      txCount: 0,
+      inEth: 0,
+      outEth: 0,
+      error: (r.reason as Error).message,
+    };
+  });
 
-    cache = { data: results, ts: Date.now() };
-    return NextResponse.json(results);
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unknown error' },
-      { status: 500 },
-    );
-  }
+  return NextResponse.json(flows, {
+    headers: { 'Cache-Control': 'public, max-age=55' },
+  });
 }
