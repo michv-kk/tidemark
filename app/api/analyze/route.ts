@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Transaction } from '@/lib/types';
 
-export const maxDuration = 30; // Allow Claude API enough time on Vercel Pro
-
-const MOCK_INSIGHTS = [
-  'Large ETH accumulation detected across multiple whale wallets. 3 addresses have been consistently buying dips — potential institutional positioning ahead of a catalyst.',
-  'BTC on-chain data shows record exchange outflows. Whales moving funds to cold storage is historically bullish. Watch for reduced sell pressure in coming sessions.',
-  'DeFi activity spiking on Arbitrum — swap volumes 340% above 7-day average. Possible token launch or airdrop farming event underway.',
-  'Cross-chain bridge activity elevated: ETH → BASE flows increased 4x. Retail and institutional interest in Base ecosystem growing rapidly.',
-];
+export const maxDuration = 30;
 
 interface AnalyzeRequest {
   transactions: Transaction[];
@@ -25,58 +18,68 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
-
-    // If no API key, return a helpful mock
     if (!apiKey) {
-      const mockInsight = MOCK_INSIGHTS[Math.floor(Math.random() * MOCK_INSIGHTS.length)];
       return NextResponse.json({
-        insight: mockInsight,
-        model: 'mock',
+        insight: null,
+        model: 'none',
         txCount: transactions.length,
         isMock: true,
+        error: 'ANTHROPIC_API_KEY not set',
       });
     }
 
-    // Build a concise summary for the AI to analyze
-    const txSummary = transactions.slice(0, 20).map(tx => ({
+    // Safe summary — handle missing fields gracefully
+    const txSummary = transactions.slice(0, 30).map(tx => ({
       chain: tx.chain,
-      token: tx.token,
+      token: tx.token ?? '?',
       valueUSD: Math.round(tx.value),
       type: tx.type,
-      from: tx.from.slice(0, 10) + '...',
-      to: tx.to.slice(0, 10) + '...',
+      from: tx.from ? tx.from.slice(0, 10) + '…' : 'unknown',
+      to:   tx.to   ? tx.to.slice(0, 10)   + '…' : 'unknown',
       isWhale: tx.isWhale,
-      source: tx.source,
+      minsAgo: Math.round((Date.now() - tx.timestamp) / 60_000),
     }));
 
     const totalVolume = transactions.reduce((s, t) => s + t.value, 0);
-    const chains = Array.from(new Set(transactions.map(t => t.chain)));
-    const whaleCount = transactions.filter(t => t.isWhale).length;
+    const chains      = Array.from(new Set(transactions.map(t => t.chain)));
+    const whaleCount  = transactions.filter(t => t.isWhale).length;
+    const tokens      = Array.from(new Set(transactions.map(t => t.token))).join(', ');
+    const avgValue    = totalVolume / transactions.length;
+
+    const contextBlock = [
+      `Total transactions: ${transactions.length} (${whaleCount} whale-tier >$500K)`,
+      `Total volume: $${(totalVolume / 1_000_000).toFixed(2)}M`,
+      `Average tx size: $${Math.round(avgValue).toLocaleString()}`,
+      `Chains active: ${chains.join(', ')}`,
+      `Tokens moved: ${tokens}`,
+    ].join('\n');
 
     const userMessage = query
-      ? `${query}\n\nTransaction data:\n${JSON.stringify(txSummary, null, 2)}`
-      : `Analyze these ${transactions.length} whale transactions. Total volume: $${(totalVolume / 1e6).toFixed(2)}M across chains: ${chains.join(', ')}. ${whaleCount} are whale-tier (>$500K).\n\nTransactions:\n${JSON.stringify(txSummary, null, 2)}`;
+      ? `${query}\n\nContext:\n${contextBlock}\n\nTransaction data (last 30):\n${JSON.stringify(txSummary, null, 2)}`
+      : `Analyze this whale activity session.\n\nContext:\n${contextBlock}\n\nTransaction data (last 30, sorted newest first):\n${JSON.stringify(txSummary, null, 2)}`;
 
-    // Dynamic import to keep this server-side only
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
     const client = new Anthropic({ apiKey });
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
-      system: `You are a crypto whale analyst with deep blockchain expertise. Analyze the provided blockchain transactions and identify:
-1) Suspicious patterns or coordinated whale activity
-2) Likely market impact (bullish/bearish signals)
-3) Which whales appear to be accumulating vs distributing
-4) Notable cross-chain activity or arbitrage
-5) Any anomalies worth watching
+      max_tokens: 1500,
+      system: `You are a senior on-chain analyst at a crypto hedge fund. You have deep expertise in blockchain data, whale wallet behavior, and market microstructure.
 
-Be concise, actionable and data-driven. Use crypto-native language. Keep response under 200 words. Format with clear bullet points starting with ▸.`,
+Analyze the provided whale transaction data and deliver a professional, structured report covering:
+
+▸ PATTERN ANALYSIS — identify any coordinated movements, repeated addresses, timing clusters, or unusual sequences
+▸ MARKET SIGNAL — is the aggregate activity bullish, bearish or neutral? Why? Consider exchange flows vs cold storage movements
+▸ TOKEN FOCUS — which tokens are being moved most aggressively and what does that imply
+▸ NOTABLE WALLETS — highlight any standout addresses or suspicious clustering
+▸ RISK FLAGS — anything anomalous, like sudden large single transfers, potential wash trading, or bridge arbitrage
+▸ OUTLOOK — one clear takeaway for a trader watching this data right now
+
+Be specific, use exact dollar amounts from the data, reference actual addresses when relevant. Write in a confident, professional tone. Avoid generic crypto platitudes. 4-6 bullet points total, each 2-3 sentences.`,
       messages: [{ role: 'user', content: userMessage }],
     });
 
-    const insight = message.content[0].type === 'text' ? message.content[0].text : '';
+    const insight = message.content[0]?.type === 'text' ? message.content[0].text : '';
 
     return NextResponse.json({
       insight,
@@ -84,18 +87,16 @@ Be concise, actionable and data-driven. Use crypto-native language. Keep respons
       txCount: transactions.length,
       isMock: false,
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[analyze route]', message);
 
-    // Return mock on any error so the UI doesn't break
-    const mockInsight = MOCK_INSIGHTS[Math.floor(Math.random() * MOCK_INSIGHTS.length)];
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[analyze]', errMsg);
     return NextResponse.json({
-      insight: mockInsight,
-      model: 'mock-fallback',
+      insight: null,
+      model: 'error',
       txCount: 0,
       isMock: true,
-      error: message,
+      error: errMsg,
     });
   }
 }
