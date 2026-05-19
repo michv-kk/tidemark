@@ -128,45 +128,49 @@ export default function MarketsPage() {
               <h3 className="text-white font-semibold text-sm">All Markets</h3>
               {loading && <div className="w-4 h-4 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />}
             </div>
-            {loading ? <TableSkeleton /> : <div className="overflow-x-auto">
-              <table className="w-full data-table">
-                <thead>
-                  <tr>
-                    <th className="w-10">#</th>
-                    <th>Asset</th>
-                    <th className="text-right">Price</th>
-                    <th className="text-right">24h %</th>
-                    <th className="text-right hidden md:table-cell">7d %</th>
-                    <th className="text-right hidden lg:table-cell">Market Cap</th>
-                    <th className="text-right hidden lg:table-cell">Volume 24h</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {coins.map((c, i) => (
-                    <tr key={c.id} className="cursor-pointer" onClick={() => { setSelectedPair(c.symbol.toUpperCase()); setTab('chart'); }}>
-                      <td className="text-gray-600 text-xs">{i + 1}</td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <img src={c.image} alt="" className="w-6 h-6 rounded-full" loading="lazy"
-                               onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                          <span className="text-white font-medium">{c.symbol.toUpperCase()}</span>
-                          <span className="text-gray-500 hidden sm:inline text-xs">{c.name}</span>
-                        </div>
-                      </td>
-                      <td className="text-right font-mono text-white">{formatUSD(c.current_price)}</td>
-                      <td className={`text-right font-semibold text-xs ${getChangeColor(c.price_change_percentage_24h ?? 0)}`}>
-                        {formatPercent(c.price_change_percentage_24h ?? 0)}
-                      </td>
-                      <td className={`text-right font-semibold text-xs hidden md:table-cell ${getChangeColor(c.price_change_percentage_7d_in_currency ?? 0)}`}>
-                        {c.price_change_percentage_7d_in_currency != null ? formatPercent(c.price_change_percentage_7d_in_currency) : '—'}
-                      </td>
-                      <td className="text-right text-gray-400 hidden lg:table-cell">{formatUSD(c.market_cap, true)}</td>
-                      <td className="text-right text-gray-400 hidden lg:table-cell">{formatUSD(c.total_volume, true)}</td>
+            {loading ? (
+              <TableSkeleton />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full data-table">
+                  <thead>
+                    <tr>
+                      <th className="w-10">#</th>
+                      <th>Asset</th>
+                      <th className="text-right">Price</th>
+                      <th className="text-right">24h %</th>
+                      <th className="text-right hidden md:table-cell">7d %</th>
+                      <th className="text-right hidden lg:table-cell">Market Cap</th>
+                      <th className="text-right hidden lg:table-cell">Volume 24h</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div></div>}
+                  </thead>
+                  <tbody>
+                    {coins.map((c, i) => (
+                      <tr key={c.id} className="cursor-pointer" onClick={() => { setSelectedPair(c.symbol.toUpperCase()); setTab('chart'); }}>
+                        <td className="text-gray-600 text-xs">{i + 1}</td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <img src={c.image} alt="" className="w-6 h-6 rounded-full" loading="lazy"
+                                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            <span className="text-white font-medium">{c.symbol.toUpperCase()}</span>
+                            <span className="text-gray-500 hidden sm:inline text-xs">{c.name}</span>
+                          </div>
+                        </td>
+                        <td className="text-right font-mono text-white">{formatUSD(c.current_price)}</td>
+                        <td className={`text-right font-semibold text-xs ${getChangeColor(c.price_change_percentage_24h ?? 0)}`}>
+                          {formatPercent(c.price_change_percentage_24h ?? 0)}
+                        </td>
+                        <td className={`text-right font-semibold text-xs hidden md:table-cell ${getChangeColor(c.price_change_percentage_7d_in_currency ?? 0)}`}>
+                          {c.price_change_percentage_7d_in_currency != null ? formatPercent(c.price_change_percentage_7d_in_currency) : '—'}
+                        </td>
+                        <td className="text-right text-gray-400 hidden lg:table-cell">{formatUSD(c.market_cap, true)}</td>
+                        <td className="text-right text-gray-400 hidden lg:table-cell">{formatUSD(c.total_volume, true)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
