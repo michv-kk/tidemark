@@ -26,13 +26,16 @@ interface WalletData {
 }
 
 async function fetchWalletData(address: string, apiKey: string): Promise<WalletData> {
-  const base = 'https://api.etherscan.io/api';
-  const keyParam = apiKey ? `&apikey=${apiKey}` : '';
+  // Use V2 API (V1 is deprecated). Fall back to env key if settings key is empty.
+  const key = apiKey || process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY || '';
+  const base = 'https://api.etherscan.io/v2/api';
+  const keyParam = key ? `&apikey=${key}` : '';
+  const chainParam = '&chainid=1';
 
   try {
     const [balRes, txRes] = await Promise.allSettled([
-      fetch(`${base}?module=account&action=balance&address=${address}&tag=latest${keyParam}`),
-      fetch(`${base}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=50&sort=desc${keyParam}`),
+      fetch(`${base}?module=account&action=balance&address=${address}&tag=latest${chainParam}${keyParam}`),
+      fetch(`${base}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=50&sort=desc${chainParam}${keyParam}`),
     ]);
 
     let ethBalance: number | undefined;
@@ -54,9 +57,20 @@ async function fetchWalletData(address: string, apiKey: string): Promise<WalletD
   }
 }
 
-function calcWhaleScore(txs: EtherTx[]): number {
+async function fetchEthPrice(): Promise<number> {
+  try {
+    const res = await fetch('/api/coingecko?path=/simple/price&ids=ethereum&vs_currencies=usd');
+    if (!res.ok) return 2100;
+    const data = await res.json();
+    return data?.ethereum?.usd ?? 2100;
+  } catch {
+    return 2100;
+  }
+}
+
+function calcWhaleScore(txs: EtherTx[], ethPrice: number): number {
   if (txs.length === 0) return 0;
-  const total = txs.reduce((s, t) => s + parseInt(t.value) / 1e18 * 3420, 0);
+  const total = txs.reduce((s, t) => s + parseInt(t.value) / 1e18 * ethPrice, 0);
   const avg = total / txs.length;
   const freq = txs.length;
   const scoreVolume = Math.min(40, Math.log10(total + 1) * 8);
@@ -84,6 +98,12 @@ export default function WalletAnalyzer({ initialAddress = '' }: AnalyzerProps) {
   const [address, setAddress] = useState(initialAddress);
   const [data, setData] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [ethPrice, setEthPrice] = useState(2100);
+
+  // Load live ETH price once on mount
+  useEffect(() => {
+    fetchEthPrice().then(setEthPrice);
+  }, []);
 
   useEffect(() => {
     if (initialAddress) analyze(initialAddress);
@@ -99,8 +119,8 @@ export default function WalletAnalyzer({ initialAddress = '' }: AnalyzerProps) {
   }, [settings.etherscanApiKey]);
 
   const known = data ? lookupWallet(data.address) : null;
-  const whaleScore = data ? calcWhaleScore(data.transactions) : 0;
-  const totalVolume = data ? data.transactions.reduce((s, t) => s + parseInt(t.value) / 1e18 * 3420, 0) : 0;
+  const whaleScore = data ? calcWhaleScore(data.transactions, ethPrice) : 0;
+  const totalVolume = data ? data.transactions.reduce((s, t) => s + parseInt(t.value) / 1e18 * ethPrice, 0) : 0;
 
   const scoreColor = whaleScore >= 70 ? 'text-red-400' : whaleScore >= 40 ? 'text-yellow-400' : 'text-green-400';
   const scoreRing = whaleScore >= 70 ? 'border-red-500' : whaleScore >= 40 ? 'border-yellow-500' : 'border-green-500';
@@ -218,7 +238,7 @@ export default function WalletAnalyzer({ initialAddress = '' }: AnalyzerProps) {
               <div className="divide-y divide-white/5 max-h-96 overflow-y-auto">
                 {data.transactions.slice(0, 25).map(tx => {
                   const ethVal = parseInt(tx.value) / 1e18;
-                  const usdVal = ethVal * 3420;
+                  const usdVal = ethVal * ethPrice;
                   const isOut = tx.from.toLowerCase() === data.address.toLowerCase();
                   return (
                     <div key={tx.hash} className="px-4 py-3 hover:bg-white/3 transition-colors flex items-center gap-4 text-sm">
