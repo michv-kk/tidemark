@@ -3,13 +3,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Transaction, ChainId } from '@/lib/types';
 import { fetchEtherscanTransactions } from '@/lib/api/etherscan';
 import { fetchMempoolTransactions } from '@/lib/api/mempool';
+import { fetchSolanaTransactions } from '@/lib/api/solana';
 
-export type SourceKey = 'etherscan' | 'mempool';
+export type SourceKey = 'etherscan' | 'mempool' | 'solana';
 export type SourceStatus = 'loading' | 'ok' | 'error';
 
 export interface ApiStatus {
   etherscan: SourceStatus;
   mempool: SourceStatus;
+  solana: SourceStatus;
 }
 
 export interface TransactionStats {
@@ -29,7 +31,8 @@ export interface UseRealTransactionsResult {
 }
 
 const ETHERSCAN_INTERVAL = 15_000;
-const MEMPOOL_INTERVAL = 20_000;
+const MEMPOOL_INTERVAL  = 20_000;
+const SOLANA_INTERVAL   = 25_000;
 const MAX_TXS = 200;
 
 function calcStats(txs: Transaction[]): TransactionStats {
@@ -58,12 +61,13 @@ export function useRealTransactions(): UseRealTransactionsResult {
   const [newTransactions, setNewTransactions] = useState<Transaction[]>([]);
   const [apiStatus, setApiStatus] = useState<ApiStatus>({
     etherscan: 'loading',
-    mempool: 'loading',
+    mempool:   'loading',
+    solana:    'loading',
   });
   const [isLoading, setIsLoading] = useState(true);
 
   // Track which sources successfully returned data
-  const sourceSuccess = useRef({ etherscan: false, mempool: false });
+  const sourceSuccess = useRef({ etherscan: false, mempool: false, solana: false });
   const isMounted = useRef(true);
   // Track IDs we've already seen to detect truly new transactions
   const seenIds = useRef(new Set<string>());
@@ -115,13 +119,27 @@ export function useRealTransactions(): UseRealTransactionsResult {
     }
   }, [setStatus, addTxs]);
 
+  const fetchSolana = useCallback(async () => {
+    setStatus('solana', 'loading');
+    try {
+      const txs = await fetchSolanaTransactions();
+      if (txs.length > 0) {
+        sourceSuccess.current.solana = true;
+        addTxs(txs);
+      }
+      setStatus('solana', 'ok');
+    } catch {
+      setStatus('solana', 'error');
+    }
+  }, [setStatus, addTxs]);
+
   // Initial load — fetch from all real sources simultaneously, no fake data
   useEffect(() => {
     isMounted.current = true;
 
     const init = async () => {
       // Fetch all real sources in parallel — no fake seed data
-      await Promise.allSettled([fetchEtherscan(), fetchMempool()]);
+      await Promise.allSettled([fetchEtherscan(), fetchMempool(), fetchSolana()]);
       if (!isMounted.current) return;
       setIsLoading(false);
     };
@@ -144,10 +162,17 @@ export function useRealTransactions(): UseRealTransactionsResult {
     return () => clearInterval(id);
   }, [fetchMempool]);
 
+  // Solana polling — every 25s (RPC rate limit buffer)
+  useEffect(() => {
+    const id = setInterval(fetchSolana, SOLANA_INTERVAL);
+    return () => clearInterval(id);
+  }, [fetchSolana]);
+
   const isUsingFallback =
     !isLoading &&
     !sourceSuccess.current.etherscan &&
-    !sourceSuccess.current.mempool;
+    !sourceSuccess.current.mempool &&
+    !sourceSuccess.current.solana;
 
   const stats = calcStats(transactions);
 

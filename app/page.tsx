@@ -238,21 +238,25 @@ export default function DashboardPage() {
             </span>
           )}
 
-          {/* Per-source status pills — only ETH and BTC */}
+          {/* Per-source status pills — EVM · BTC · SOL */}
           <div className="flex gap-1 ml-1">
-            {(['etherscan', 'mempool'] as const).map(src => (
+            {([
+              { key: 'etherscan', label: 'EVM', title: 'ETH · BASE · ARB via Etherscan V2' },
+              { key: 'mempool',   label: 'BTC', title: 'Bitcoin mempool — Mempool.space' },
+              { key: 'solana',    label: 'SOL', title: 'Solana whale txs via public RPC' },
+            ] as const).map(({ key, label, title }) => (
               <span
-                key={src}
-                title={src === 'etherscan' ? 'ETH · BASE · ARB whale txs via Etherscan V2' : 'Bitcoin mempool'}
+                key={key}
+                title={title}
                 className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
-                  apiStatus[src] === 'ok'
+                  apiStatus[key] === 'ok'
                     ? 'text-green-400 border-green-500/30 bg-green-500/10'
-                    : apiStatus[src] === 'loading'
+                    : apiStatus[key] === 'loading'
                     ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'
                     : 'text-red-400 border-red-500/30 bg-red-500/10'
                 }`}
               >
-                {src === 'etherscan' ? 'EVM' : 'BTC'}
+                {label}
               </span>
             ))}
           </div>
@@ -267,7 +271,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-white">Whale Transaction Monitor</h1>
         <p className="text-gray-500 text-sm mt-1">
           {isLive
-            ? 'Live blockchain data — ETH · BASE · ARB via Etherscan V2 + BTC via Mempool.space'
+            ? 'Live data — ETH · BASE · ARB via Etherscan V2 · BTC via Mempool.space · SOL via RPC'
             : isLoading
             ? 'Fetching real-time blockchain data...'
             : 'Unable to connect to blockchain APIs'}
