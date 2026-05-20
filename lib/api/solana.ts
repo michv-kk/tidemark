@@ -1,7 +1,7 @@
 import { Transaction } from '../types';
 
-// ─── Solana mainnet public RPC — no API key needed ────────────────────────────
-const SOL_RPC = 'https://api.mainnet-beta.solana.com';
+// ─── Server-side proxy for Solana RPC (avoids CORS on direct browser calls) ───
+const SOL_RPC = '/api/solana';
 
 // ─── Token mints we care about ────────────────────────────────────────────────
 const MINT_SYMBOLS: Record<string, string> = {

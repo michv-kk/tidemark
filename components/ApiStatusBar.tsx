@@ -14,7 +14,7 @@ async function checkEtherscan(): Promise<boolean> {
 
 async function checkSolana(): Promise<boolean> {
   try {
-    const r = await fetch("https://api.mainnet-beta.solana.com", {
+    const r = await fetch("/api/solana", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth" }),
