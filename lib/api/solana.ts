@@ -1,6 +1,7 @@
 import { Transaction } from '../types';
 
-// ─── Server-side proxy for Solana RPC (avoids CORS on direct browser calls) ───
+// ─── Solana RPC proxy (avoids browser CORS) ───────────────────────────────────
+// Our /api/solana route proxies to multiple public endpoints with fallback.
 const SOL_RPC = '/api/solana';
 
 // ─── SPL token mints we track ─────────────────────────────────────────────────

@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 
-// ─── This route proxies ALL Etherscan token-transfer queries server-side. ─────
-// Why: browser-side calls share one API key and hit the 5 req/s rate limit
-// almost immediately when 19+ calls fire in parallel. Server-side calls use
-// Vercel Data Cache — each unique URL is cached for 30 s, so all 19 Etherscan
-// fetches are revalidated on a rolling 30 s schedule with zero rate-limit risk.
-export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+// ISR: Vercel caches the full route response for 30 s across ALL users.
+// Only one Etherscan fetch cycle happens per 30 s regardless of traffic.
+// force-dynamic is NOT set — that would bypass the ISR cache.
+export const revalidate = 30;
+export const maxDuration = 25;
 
 const ETHERSCAN_V2 = 'https://api.etherscan.io/v2/api';
 const MIN_USD      = 100_000;
@@ -121,7 +119,7 @@ async function fetchOneContract(
 
   // Vercel Data Cache: each unique URL is served from cache for 30 s, then
   // revalidated in the background. Zero Etherscan rate-limit risk after warm-up.
-  const res = await fetch(url, { next: { revalidate: 30 } });
+  const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) return [];
 
   const data = await res.json();

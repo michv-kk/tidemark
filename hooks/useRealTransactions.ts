@@ -30,14 +30,38 @@ export interface UseRealTransactionsResult {
   isUsingFallback: boolean;
 }
 
-// Polling intervals — server cache is 30 s so polling faster than that
-// just serves cached data instantly (no extra Etherscan calls).
-const ETHERSCAN_INTERVAL = 30_000;  // matches server cache TTL
+const ETHERSCAN_INTERVAL = 30_000;
 const MEMPOOL_INTERVAL   = 20_000;
 const SOLANA_INTERVAL    = 30_000;
+const MAX_TXS            = 1000;
+const STORAGE_KEY        = 'tidemark_whale_txs';
+const STORAGE_MAX        = 500; // save fewer to localStorage (browser limit)
 
-// Keep up to 1000 transactions in memory so history doesn't disappear
-const MAX_TXS = 1000;
+// ── localStorage helpers (SSR-safe) ──────────────────────────────────────────
+
+function loadFromStorage(): Transaction[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: Transaction[] = JSON.parse(raw);
+    // Only keep transactions from the last 48 hours (avoid stale data)
+    const cutoff = Date.now() - 48 * 3_600_000;
+    return parsed.filter(t => t.timestamp > cutoff);
+  } catch {
+    return [];
+  }
+}
+
+function saveToStorage(txs: Transaction[]) {
+  try {
+    // Save the newest STORAGE_MAX transactions
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(txs.slice(0, STORAGE_MAX)));
+  } catch {
+    // localStorage full — ignore
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
 
 function calcStats(txs: Transaction[]): TransactionStats {
   const totalVolume = txs.reduce((sum, t) => sum + t.value, 0);
@@ -56,8 +80,13 @@ function calcStats(txs: Transaction[]): TransactionStats {
 function mergeTxs(existing: Transaction[], incoming: Transaction[]): Transaction[] {
   const existingIds = new Set(existing.map(t => t.id));
   const newOnes = incoming.filter(t => !existingIds.has(t.id));
-  return [...newOnes, ...existing].slice(0, MAX_TXS);
+  // Sort newest-first across everything
+  const merged = [...newOnes, ...existing];
+  merged.sort((a, b) => b.timestamp - a.timestamp);
+  return merged.slice(0, MAX_TXS);
 }
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useRealTransactions(): UseRealTransactionsResult {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -74,6 +103,15 @@ export function useRealTransactions(): UseRealTransactionsResult {
   const initialDone   = useRef(false);
   const seenIds       = useRef(new Set<string>());
 
+  // Load persisted transactions on first mount (before any API call)
+  useEffect(() => {
+    const saved = loadFromStorage();
+    if (saved.length > 0) {
+      saved.forEach(t => seenIds.current.add(t.id));
+      setTransactions(saved);
+    }
+  }, []);
+
   const setStatus = useCallback((key: SourceKey, status: SourceStatus) => {
     if (!isMounted.current) return;
     setApiStatus(prev => ({ ...prev, [key]: status }));
@@ -84,13 +122,14 @@ export function useRealTransactions(): UseRealTransactionsResult {
     const brandNew = incoming.filter(t => !seenIds.current.has(t.id));
     brandNew.forEach(t => seenIds.current.add(t.id));
     if (brandNew.length > 0) setNewTransactions(brandNew);
-    setTransactions(prev => mergeTxs(prev, incoming));
+    setTransactions(prev => {
+      const merged = mergeTxs(prev, incoming);
+      saveToStorage(merged); // persist after every update
+      return merged;
+    });
   }, []);
 
-  // ── Per-source fetch functions ──────────────────────────────────────────────
-  // During polling we ONLY set status to 'loading' on the very first fetch.
-  // After that we silently update in background so the status pill stays green
-  // and the UI doesn't flash yellow every 30 seconds.
+  // ── Fetch functions (loading status only on first call) ───────────────────
 
   const fetchEtherscan = useCallback(async (initial = false) => {
     if (initial) setStatus('etherscan', 'loading');
@@ -134,7 +173,8 @@ export function useRealTransactions(): UseRealTransactionsResult {
     }
   }, [setStatus, addTxs]);
 
-  // ── Initial load ────────────────────────────────────────────────────────────
+  // ── Initial load ──────────────────────────────────────────────────────────
+
   useEffect(() => {
     isMounted.current = true;
     if (initialDone.current) return;
@@ -152,7 +192,8 @@ export function useRealTransactions(): UseRealTransactionsResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Background polling ──────────────────────────────────────────────────────
+  // ── Polling ───────────────────────────────────────────────────────────────
+
   useEffect(() => {
     const id = setInterval(() => fetchEtherscan(false), ETHERSCAN_INTERVAL);
     return () => clearInterval(id);
