@@ -23,30 +23,33 @@ export interface TransactionStats {
 
 export interface UseRealTransactionsResult {
   transactions: Transaction[];
-  newTransactions: Transaction[]; // transactions added since last render
+  newTransactions: Transaction[];
   stats: TransactionStats;
   apiStatus: ApiStatus;
   isLoading: boolean;
   isUsingFallback: boolean;
 }
 
-const ETHERSCAN_INTERVAL = 15_000;
-const MEMPOOL_INTERVAL  = 20_000;
-const SOLANA_INTERVAL   = 25_000;
-const MAX_TXS = 500;
+// Polling intervals — server cache is 30 s so polling faster than that
+// just serves cached data instantly (no extra Etherscan calls).
+const ETHERSCAN_INTERVAL = 30_000;  // matches server cache TTL
+const MEMPOOL_INTERVAL   = 20_000;
+const SOLANA_INTERVAL    = 30_000;
+
+// Keep up to 1000 transactions in memory so history doesn't disappear
+const MAX_TXS = 1000;
 
 function calcStats(txs: Transaction[]): TransactionStats {
   const totalVolume = txs.reduce((sum, t) => sum + t.value, 0);
   const biggestTx = txs.length > 0
     ? txs.reduce((max, t) => (t.value > max.value ? t : max), txs[0])
     : null;
-  const oneHourAgo = Date.now() - 3_600_000;
+  const oneDayAgo = Date.now() - 86_400_000;
   const activeChains = Array.from(
-    new Set(txs.filter(t => t.timestamp > oneHourAgo).map(t => t.chain))
+    new Set(txs.filter(t => t.timestamp > oneDayAgo).map(t => t.chain))
   ) as ChainId[];
   const oneMinAgo = Date.now() - 60_000;
   const txPerMinute = txs.filter(t => t.timestamp > oneMinAgo).length;
-
   return { totalVolume, biggestTx, activeChains, txPerMinute };
 }
 
@@ -66,11 +69,10 @@ export function useRealTransactions(): UseRealTransactionsResult {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Track which sources successfully returned data
   const sourceSuccess = useRef({ etherscan: false, mempool: false, solana: false });
-  const isMounted = useRef(true);
-  // Track IDs we've already seen to detect truly new transactions
-  const seenIds = useRef(new Set<string>());
+  const isMounted     = useRef(true);
+  const initialDone   = useRef(false);
+  const seenIds       = useRef(new Set<string>());
 
   const setStatus = useCallback((key: SourceKey, status: SourceStatus) => {
     if (!isMounted.current) return;
@@ -79,20 +81,19 @@ export function useRealTransactions(): UseRealTransactionsResult {
 
   const addTxs = useCallback((incoming: Transaction[]) => {
     if (!isMounted.current || incoming.length === 0) return;
-
-    // Find genuinely new transactions (not seen before)
     const brandNew = incoming.filter(t => !seenIds.current.has(t.id));
     brandNew.forEach(t => seenIds.current.add(t.id));
-
-    if (brandNew.length > 0) {
-      setNewTransactions(brandNew);
-    }
-
+    if (brandNew.length > 0) setNewTransactions(brandNew);
     setTransactions(prev => mergeTxs(prev, incoming));
   }, []);
 
-  const fetchEtherscan = useCallback(async () => {
-    setStatus('etherscan', 'loading');
+  // ── Per-source fetch functions ──────────────────────────────────────────────
+  // During polling we ONLY set status to 'loading' on the very first fetch.
+  // After that we silently update in background so the status pill stays green
+  // and the UI doesn't flash yellow every 30 seconds.
+
+  const fetchEtherscan = useCallback(async (initial = false) => {
+    if (initial) setStatus('etherscan', 'loading');
     try {
       const txs = await fetchEtherscanTransactions();
       if (txs.length > 0) {
@@ -105,8 +106,8 @@ export function useRealTransactions(): UseRealTransactionsResult {
     }
   }, [setStatus, addTxs]);
 
-  const fetchMempool = useCallback(async () => {
-    setStatus('mempool', 'loading');
+  const fetchMempool = useCallback(async (initial = false) => {
+    if (initial) setStatus('mempool', 'loading');
     try {
       const txs = await fetchMempoolTransactions();
       if (txs.length > 0) {
@@ -119,8 +120,8 @@ export function useRealTransactions(): UseRealTransactionsResult {
     }
   }, [setStatus, addTxs]);
 
-  const fetchSolana = useCallback(async () => {
-    setStatus('solana', 'loading');
+  const fetchSolana = useCallback(async (initial = false) => {
+    if (initial) setStatus('solana', 'loading');
     try {
       const txs = await fetchSolanaTransactions();
       if (txs.length > 0) {
@@ -133,38 +134,37 @@ export function useRealTransactions(): UseRealTransactionsResult {
     }
   }, [setStatus, addTxs]);
 
-  // Initial load — fetch from all real sources simultaneously, no fake data
+  // ── Initial load ────────────────────────────────────────────────────────────
   useEffect(() => {
     isMounted.current = true;
+    if (initialDone.current) return;
+    initialDone.current = true;
 
-    const init = async () => {
-      // Fetch all real sources in parallel — no fake seed data
-      await Promise.allSettled([fetchEtherscan(), fetchMempool(), fetchSolana()]);
-      if (!isMounted.current) return;
-      setIsLoading(false);
-    };
-
-    init();
+    Promise.allSettled([
+      fetchEtherscan(true),
+      fetchMempool(true),
+      fetchSolana(true),
+    ]).then(() => {
+      if (isMounted.current) setIsLoading(false);
+    });
 
     return () => { isMounted.current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Etherscan polling — every 15s
+  // ── Background polling ──────────────────────────────────────────────────────
   useEffect(() => {
-    const id = setInterval(fetchEtherscan, ETHERSCAN_INTERVAL);
+    const id = setInterval(() => fetchEtherscan(false), ETHERSCAN_INTERVAL);
     return () => clearInterval(id);
   }, [fetchEtherscan]);
 
-  // Mempool polling — every 20s
   useEffect(() => {
-    const id = setInterval(fetchMempool, MEMPOOL_INTERVAL);
+    const id = setInterval(() => fetchMempool(false), MEMPOOL_INTERVAL);
     return () => clearInterval(id);
   }, [fetchMempool]);
 
-  // Solana polling — every 25s (RPC rate limit buffer)
   useEffect(() => {
-    const id = setInterval(fetchSolana, SOLANA_INTERVAL);
+    const id = setInterval(() => fetchSolana(false), SOLANA_INTERVAL);
     return () => clearInterval(id);
   }, [fetchSolana]);
 
@@ -174,7 +174,12 @@ export function useRealTransactions(): UseRealTransactionsResult {
     !sourceSuccess.current.mempool &&
     !sourceSuccess.current.solana;
 
-  const stats = calcStats(transactions);
-
-  return { transactions, newTransactions, stats, apiStatus, isLoading, isUsingFallback };
+  return {
+    transactions,
+    newTransactions,
+    stats: calcStats(transactions),
+    apiStatus,
+    isLoading,
+    isUsingFallback,
+  };
 }

@@ -20,8 +20,9 @@ function calcMaxTransaction(txs: Transaction[]): Transaction | null {
 }
 
 function calcActiveChains(txs: Transaction[]): ChainId[] {
-  const oneHourAgo = Date.now() - 3_600_000;
-  const active = new Set(txs.filter(t => t.timestamp > oneHourAgo).map(t => t.chain));
+  // Use 24h window — "active" means we received data from that chain today
+  const oneDayAgo = Date.now() - 86_400_000;
+  const active = new Set(txs.filter(t => t.timestamp > oneDayAgo).map(t => t.chain));
   return Array.from(active) as ChainId[];
 }
 
