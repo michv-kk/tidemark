@@ -150,28 +150,30 @@ function SentimentSummary({ rows }: { rows: DisplayRow[] }) {
 // ─── Open Interest Panel ──────────────────────────────────────────────────────
 
 function OIPanel({ rows }: { rows: DisplayRow[] }) {
-  const filtered = rows.filter(r => r.oiUSD !== null && (r.symbol === 'BTCUSDT' || r.symbol === 'ETHUSDT'));
+  const filtered = rows.filter(r => r.oiUSD !== null);
 
   if (filtered.length === 0) return null;
+
+  // Sort by OI descending
+  const sorted = [...filtered].sort((a, b) => (b.oiUSD ?? 0) - (a.oiUSD ?? 0));
 
   return (
     <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5 mb-6">
       <h2 className="text-white font-bold text-base mb-4 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-cyan-400 flex-shrink-0" />
-        Open Interest — BTC &amp; ETH
+        Open Interest — All Assets
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {filtered.map(row => (
-          <div key={row.symbol} className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${rateDotColor(row.fundingRate)}`} />
-                <span className="text-white font-bold text-sm">{row.ticker}</span>
-              </div>
-              <span className="text-xs text-gray-500 font-mono">${Number(row.markPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {sorted.map((row) => (
+          <div key={row.symbol} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${rateDotColor(row.fundingRate)}`} />
+              <span className="text-white font-bold text-sm">{row.ticker}</span>
             </div>
-            <div className="text-2xl font-black text-white">{formatOI(row.oiUSD)}</div>
-            <div className="text-xs text-gray-500 mt-1">Total open interest in USD</div>
+            <div className="text-lg font-black text-white">{formatOI(row.oiUSD)}</div>
+            <div className="text-[10px] text-gray-500 mt-0.5 font-mono">
+              ${Number(row.markPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </div>
           </div>
         ))}
       </div>
@@ -292,11 +294,12 @@ export default function DerivativesPage() {
       // Filter to our tracked symbols
       const tracked = allFunding.filter(f => TRACKED_SYMBOLS.includes(f.symbol));
 
-      // Fetch OI for BTC and ETH only
-      const oiResults = await Promise.allSettled([
-        fetch('https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT', { signal: AbortSignal.timeout(8000) }),
-        fetch('https://fapi.binance.com/fapi/v1/openInterest?symbol=ETHUSDT', { signal: AbortSignal.timeout(8000) }),
-      ]);
+      // Fetch OI for all tracked symbols in parallel
+      const oiResults = await Promise.allSettled(
+        TRACKED_SYMBOLS.map(sym =>
+          fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${sym}`, { signal: AbortSignal.timeout(8000) })
+        )
+      );
 
       const oiMap: Record<string, number> = {};
       for (const result of oiResults) {
