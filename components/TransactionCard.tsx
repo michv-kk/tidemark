@@ -1,7 +1,8 @@
 'use client';
 import React, { memo } from 'react';
 import { Transaction } from '@/lib/types';
-import { formatUSD, formatAddress, formatTimeAgo, formatTokenAmount } from '@/lib/formatters';
+import { formatAddress, formatTimeAgo, formatTokenAmount } from '@/lib/formatters';
+import { useCurrency } from '@/contexts/SettingsContext';
 import { lookupWallet } from '@/lib/knownWallets';
 import { ArrowRight, ExternalLink } from 'lucide-react';
 
@@ -36,6 +37,7 @@ interface Props {
 }
 
 function TransactionCard({ tx, onClick }: Props) {
+  const fmt = useCurrency();
   const fromLabel = lookupWallet(tx.from)?.label;
   const toLabel = lookupWallet(tx.to)?.label;
   const badge = getWhaleBadge(tx.value);
@@ -71,7 +73,7 @@ function TransactionCard({ tx, onClick }: Props) {
           )}
         </div>
         <div className="text-right">
-          <div className="text-xl font-bold text-white">{formatUSD(tx.value, true)}</div>
+          <div className="text-xl font-bold text-white">{fmt(tx.value, true)}</div>
           <div className="text-xs text-gray-400">{formatTokenAmount(tx.amount, tx.token)}</div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 'use client';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { AppSettings, DEFAULT_SETTINGS } from '@/lib/types';
+import { formatCurrency } from '@/lib/formatters';
 
 interface SettingsCtx {
   settings: AppSettings;
@@ -34,4 +35,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
 export function useSettings() {
   return useContext(Ctx);
+}
+
+/** Returns a currency-aware formatter that respects the user's selected currency. */
+export function useCurrency() {
+  const { settings } = useContext(Ctx);
+  return useCallback(
+    (value: number, compact = false) => formatCurrency(value, settings.currency, compact),
+    [settings.currency]
+  );
 }

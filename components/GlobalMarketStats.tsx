@@ -1,7 +1,8 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { GlobalMarketData } from '@/lib/types';
-import { formatUSD, formatPercent } from '@/lib/formatters';
+import { formatPercent } from '@/lib/formatters';
+import { useCurrency } from '@/contexts/SettingsContext';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
 async function fetchGlobal(): Promise<GlobalMarketData | null> {
@@ -19,6 +20,7 @@ async function fetchGlobal(): Promise<GlobalMarketData | null> {
 }
 
 export default function GlobalMarketStats() {
+  const fmt = useCurrency();
   const [data, setData] = useState<GlobalMarketData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -69,8 +71,8 @@ export default function GlobalMarketStats() {
   const volPct = cap > 0 ? (vol / cap * 100).toFixed(1) : '0';
 
   const items = [
-    { label: 'Market Cap', value: formatUSD(cap, true), sub: formatPercent(capChange), positive: capChange >= 0 },
-    { label: '24h Volume', value: formatUSD(vol, true), sub: `${volPct}% of cap`, positive: null },
+    { label: 'Market Cap', value: fmt(cap, true), sub: formatPercent(capChange), positive: capChange >= 0 },
+    { label: '24h Volume', value: fmt(vol, true), sub: `${volPct}% of cap`, positive: null },
     { label: 'BTC Dominance', value: `${btcDom.toFixed(1)}%`, sub: 'Bitcoin share', positive: null },
     { label: 'ETH Dominance', value: `${ethDom.toFixed(1)}%`, sub: 'Ethereum share', positive: null },
     { label: 'Active Cryptos', value: active.toLocaleString(), sub: 'Tracked assets', positive: null },

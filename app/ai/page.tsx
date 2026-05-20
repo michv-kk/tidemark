@@ -2,7 +2,8 @@
 import React, { useState, useMemo } from 'react';
 import { useRealTransactions } from '@/hooks/useRealTransactions';
 import { Transaction, ChainId } from '@/lib/types';
-import { formatUSD, formatTimeAgo } from '@/lib/formatters';
+import { formatTimeAgo } from '@/lib/formatters';
+import { useCurrency } from '@/contexts/SettingsContext';
 import { lookupWallet } from '@/lib/knownWallets';
 import { Sparkles, Brain, Loader2, TrendingUp, Zap, AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
 
@@ -27,6 +28,7 @@ const CHAIN_COLORS: Record<ChainId, string> = {
 };
 
 function ChainPie({ transactions }: { transactions: Transaction[] }) {
+  const fmt = useCurrency();
   const chainCounts = useMemo(() => {
     const counts: Record<string, { count: number; volume: number }> = {};
     for (const tx of transactions) {
@@ -60,7 +62,7 @@ function ChainPie({ transactions }: { transactions: Transaction[] }) {
               </div>
               <div className="text-right">
                 <span className="text-sm font-bold text-white">{pct.toFixed(1)}%</span>
-                <span className="text-xs text-gray-500 ml-2">{formatUSD(volume, true)}</span>
+                <span className="text-xs text-gray-500 ml-2">{fmt(volume, true)}</span>
               </div>
             </div>
             <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
@@ -77,6 +79,7 @@ function ChainPie({ transactions }: { transactions: Transaction[] }) {
 }
 
 function TopWhales({ transactions }: { transactions: Transaction[] }) {
+  const fmt = useCurrency();
   const whales = useMemo(() => {
     const addressMap = new Map<string, { volume: number; txCount: number; lastSeen: number }>();
     for (const tx of transactions) {
@@ -122,7 +125,7 @@ function TopWhales({ transactions }: { transactions: Transaction[] }) {
             <div className="text-xs text-gray-500 mt-0.5 font-mono">{addr.slice(0, 16)}...</div>
           </div>
           <div className="text-right flex-shrink-0">
-            <div className="text-sm font-bold text-white">{formatUSD(volume, true)}</div>
+            <div className="text-sm font-bold text-white">{fmt(volume, true)}</div>
             <div className="text-xs text-gray-500">{txCount} txs · {formatTimeAgo(lastSeen)}</div>
           </div>
         </div>
@@ -132,6 +135,7 @@ function TopWhales({ transactions }: { transactions: Transaction[] }) {
 }
 
 function BiggestTxs({ transactions }: { transactions: Transaction[] }) {
+  const fmt = useCurrency();
   const top = useMemo(
     () => [...transactions].sort((a, b) => b.value - a.value).slice(0, 5),
     [transactions]
@@ -162,7 +166,7 @@ function BiggestTxs({ transactions }: { transactions: Transaction[] }) {
             </div>
           </div>
           <div className="text-right flex-shrink-0">
-            <div className="text-sm font-bold text-yellow-400">{formatUSD(tx.value, true)}</div>
+            <div className="text-sm font-bold text-yellow-400">{fmt(tx.value, true)}</div>
             <div className="text-xs text-gray-600 font-mono">{tx.hash.slice(0, 10)}...</div>
           </div>
         </div>
@@ -172,6 +176,7 @@ function BiggestTxs({ transactions }: { transactions: Transaction[] }) {
 }
 
 export default function AiInsightsPage() {
+  const fmt = useCurrency();
   const { transactions, stats, isLoading, isUsingFallback } = useRealTransactions();
   const [aiResult, setAiResult] = useState<AiResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -297,7 +302,7 @@ export default function AiInsightsPage() {
             <TrendingUp size={16} className="text-cyan-400" />
             <span className="text-xs text-gray-400 uppercase tracking-wider">Total Volume</span>
           </div>
-          <div className="text-xl font-bold text-white">{formatUSD(stats.totalVolume, true)}</div>
+          <div className="text-xl font-bold text-white">{fmt(stats.totalVolume, true)}</div>
           <div className="text-xs text-gray-500 mt-1">{transactions.length} transactions</div>
         </div>
         <div className="stat-card">
@@ -306,7 +311,7 @@ export default function AiInsightsPage() {
             <span className="text-xs text-gray-400 uppercase tracking-wider">Largest TX</span>
           </div>
           <div className="text-xl font-bold text-white">
-            {stats.biggestTx ? formatUSD(stats.biggestTx.value, true) : '—'}
+            {stats.biggestTx ? fmt(stats.biggestTx.value, true) : '—'}
           </div>
           <div className="text-xs text-gray-500 mt-1">
             {stats.biggestTx ? `${stats.biggestTx.token} on ${stats.biggestTx.chain}` : 'No data'}

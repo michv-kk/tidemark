@@ -5,7 +5,8 @@ import GlobalMarketStats from '@/components/GlobalMarketStats';
 import MarketHeatmap from '@/components/MarketHeatmap';
 import { TradingViewWidget } from '@/components/TradingViewWidget';
 import { CoinData } from '@/lib/types';
-import { formatUSD, formatPercent, getChangeColor } from '@/lib/formatters';
+import { formatPercent, getChangeColor } from '@/lib/formatters';
+import { useCurrency } from '@/contexts/SettingsContext';
 import { fetchTopCoins } from '@/lib/coingecko';
 
 const TOP_PAIRS = ['BTC', 'ETH', 'SOL', 'BNB', 'ARB', 'AVAX', 'MATIC', 'LINK', 'UNI', 'OP'];
@@ -46,6 +47,7 @@ function TableSkeleton() {
 }
 
 export default function MarketsPage() {
+  const fmt = useCurrency();
   const [coins, setCoins] = useState<CoinData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPair, setSelectedPair] = useState('BTC');
@@ -109,7 +111,7 @@ export default function MarketsPage() {
                         <div className="text-gray-500 text-xs">{c.name}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-white text-sm font-mono">{formatUSD(c.current_price)}</div>
+                        <div className="text-white text-sm font-mono">{fmt(c.current_price)}</div>
                         <div className={`text-xs font-semibold ${getChangeColor(c.price_change_percentage_24h ?? 0)}`}>
                           {formatPercent(c.price_change_percentage_24h ?? 0)}
                         </div>
@@ -154,15 +156,15 @@ export default function MarketsPage() {
                             <span className="text-gray-500 hidden sm:inline text-xs">{c.name}</span>
                           </div>
                         </td>
-                        <td className="text-right font-mono text-white">{formatUSD(c.current_price)}</td>
+                        <td className="text-right font-mono text-white">{fmt(c.current_price)}</td>
                         <td className={`text-right font-semibold text-xs ${getChangeColor(c.price_change_percentage_24h ?? 0)}`}>
                           {formatPercent(c.price_change_percentage_24h ?? 0)}
                         </td>
                         <td className={`text-right font-semibold text-xs hidden md:table-cell ${getChangeColor(c.price_change_percentage_7d_in_currency ?? 0)}`}>
                           {c.price_change_percentage_7d_in_currency != null ? formatPercent(c.price_change_percentage_7d_in_currency) : '—'}
                         </td>
-                        <td className="text-right text-gray-400 hidden lg:table-cell">{formatUSD(c.market_cap, true)}</td>
-                        <td className="text-right text-gray-400 hidden lg:table-cell">{formatUSD(c.total_volume, true)}</td>
+                        <td className="text-right text-gray-400 hidden lg:table-cell">{fmt(c.market_cap, true)}</td>
+                        <td className="text-right text-gray-400 hidden lg:table-cell">{fmt(c.total_volume, true)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -204,10 +206,10 @@ export default function MarketsPage() {
             return (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                  { label: 'Current Price', value: formatUSD(coin.current_price) },
+                  { label: 'Current Price', value: fmt(coin.current_price) },
                   { label: '24h Change', value: formatPercent(coin.price_change_percentage_24h ?? 0), colored: true, change: coin.price_change_percentage_24h ?? 0 },
-                  { label: '24h High', value: formatUSD(coin.high_24h ?? 0) },
-                  { label: '24h Low', value: formatUSD(coin.low_24h ?? 0) },
+                  { label: '24h High', value: fmt(coin.high_24h ?? 0) },
+                  { label: '24h Low', value: fmt(coin.low_24h ?? 0) },
                 ].map((s, i) => (
                   <div key={i} className="stat-card">
                     <div className="text-xs text-gray-500 mb-1">{s.label}</div>

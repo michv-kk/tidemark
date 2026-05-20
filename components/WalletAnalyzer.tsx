@@ -1,9 +1,9 @@
 'use client';
 import React, { useState, useCallback, useEffect } from 'react';
 import { lookupWallet } from '@/lib/knownWallets';
-import { formatUSD, formatTimestamp, formatAddress } from '@/lib/formatters';
+import { formatTimestamp, formatAddress } from '@/lib/formatters';
 import { Search, Copy, ExternalLink, Zap, TrendingUp, Clock, Activity } from 'lucide-react';
-import { useSettings } from '@/contexts/SettingsContext';
+import { useSettings, useCurrency } from '@/contexts/SettingsContext';
 
 interface EtherTx {
   hash: string;
@@ -95,6 +95,7 @@ interface AnalyzerProps { initialAddress?: string }
 
 export default function WalletAnalyzer({ initialAddress = '' }: AnalyzerProps) {
   const { settings } = useSettings();
+  const fmt = useCurrency();
   const [address, setAddress] = useState(initialAddress);
   const [data, setData] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -216,7 +217,7 @@ export default function WalletAnalyzer({ initialAddress = '' }: AnalyzerProps) {
             {/* Stats row */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
               {[
-                { icon: <TrendingUp size={14} className="text-cyan-400" />, label: 'Total Volume', value: formatUSD(totalVolume, true) },
+                { icon: <TrendingUp size={14} className="text-cyan-400" />, label: 'Total Volume', value: fmt(totalVolume, true) },
                 { icon: <Activity size={14} className="text-green-400" />, label: 'Transactions', value: data.transactions.length.toString() },
                 { icon: <Zap size={14} className="text-yellow-400" />, label: 'ETH Balance', value: data.ethBalance != null ? `${data.ethBalance.toFixed(4)} ETH` : 'N/A' },
                 { icon: <Clock size={14} className="text-purple-400" />, label: 'First TX', value: data.firstTx ? formatTimestamp(parseInt(data.firstTx.timeStamp) * 1000).split(',')[0] : 'N/A' },
@@ -251,7 +252,7 @@ export default function WalletAnalyzer({ initialAddress = '' }: AnalyzerProps) {
                       </div>
                       <div className="text-right">
                         <div className="text-white font-mono text-xs">{ethVal.toFixed(4)} ETH</div>
-                        <div className="text-gray-500 text-xs">{formatUSD(usdVal, true)}</div>
+                        <div className="text-gray-500 text-xs">{fmt(usdVal, true)}</div>
                       </div>
                       <a href={`https://etherscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer"
                          className="text-gray-600 hover:text-cyan-400 transition-colors flex-shrink-0">

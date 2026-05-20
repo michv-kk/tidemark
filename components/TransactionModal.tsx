@@ -1,7 +1,8 @@
 'use client';
 import React, { useEffect, useCallback, useState } from 'react';
 import { Transaction } from '@/lib/types';
-import { formatUSD, formatTimestamp, formatTokenAmount, formatNumber } from '@/lib/formatters';
+import { formatTimestamp, formatTokenAmount, formatNumber } from '@/lib/formatters';
+import { useCurrency } from '@/contexts/SettingsContext';
 import { lookupWallet } from '@/lib/knownWallets';
 import { X, Copy, ExternalLink, Wallet, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -37,25 +38,27 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 const EXPLORER_URLS: Record<string, string> = {
-  ETH: 'https://etherscan.io/tx/',
-  BTC: 'https://mempool.space/tx/',
-  BSC: 'https://bscscan.com/tx/',
-  SOL: 'https://solscan.io/tx/',
-  ARB: 'https://arbiscan.io/tx/',
+  ETH:   'https://etherscan.io/tx/',
+  BTC:   'https://mempool.space/tx/',
+  BSC:   'https://bscscan.com/tx/',
+  SOL:   'https://solscan.io/tx/',
+  ARB:   'https://arbiscan.io/tx/',
+  BASE:  'https://basescan.org/tx/',
   MATIC: 'https://polygonscan.com/tx/',
-  AVAX: 'https://snowtrace.io/tx/',
-  OP: 'https://optimistic.etherscan.io/tx/',
+  AVAX:  'https://snowtrace.io/tx/',
+  OP:    'https://optimistic.etherscan.io/tx/',
 };
 
 const ADDR_EXPLORERS: Record<string, string> = {
-  ETH: 'https://etherscan.io/address/',
-  BTC: 'https://mempool.space/address/',
-  BSC: 'https://bscscan.com/address/',
-  SOL: 'https://solscan.io/account/',
-  ARB: 'https://arbiscan.io/address/',
+  ETH:   'https://etherscan.io/address/',
+  BTC:   'https://mempool.space/address/',
+  BSC:   'https://bscscan.com/address/',
+  SOL:   'https://solscan.io/account/',
+  ARB:   'https://arbiscan.io/address/',
+  BASE:  'https://basescan.org/address/',
   MATIC: 'https://polygonscan.com/address/',
-  AVAX: 'https://snowtrace.io/address/',
-  OP: 'https://optimistic.etherscan.io/address/',
+  AVAX:  'https://snowtrace.io/address/',
+  OP:    'https://optimistic.etherscan.io/address/',
 };
 
 const EXCHANGES = ['Binance', 'Coinbase', 'Kraken', 'OKX', 'Bybit', 'Huobi', 'Bitfinex'];
@@ -142,6 +145,7 @@ function useEthPrice() {
 
 export default function TransactionModal({ tx, onClose }: Props) {
   const router = useRouter();
+  const fmt = useCurrency();
   const { price: ethPrice, estimated: ethPriceEstimated } = useEthPrice();
 
   const handleClose = useCallback(() => onClose(), [onClose]);
@@ -194,7 +198,7 @@ export default function TransactionModal({ tx, onClose }: Props) {
 
         {/* Value hero */}
         <div className="bg-gradient-to-r from-cyan-950/50 to-blue-950/50 border border-cyan-500/20 rounded-xl p-5 mb-5 text-center">
-          <div className="text-3xl font-bold text-white">{formatUSD(tx.value)}</div>
+          <div className="text-3xl font-bold text-white">{fmt(tx.value)}</div>
           <div className="text-cyan-400 text-sm mt-1">{formatTokenAmount(tx.amount, tx.token)}</div>
           <div className="text-gray-500 text-xs mt-1 uppercase tracking-wider">{tx.type}</div>
         </div>
@@ -228,7 +232,7 @@ export default function TransactionModal({ tx, onClose }: Props) {
           </Row>
           <Row label="Chain"><span>{tx.chain}</span></Row>
           <Row label="Block"><span>#{tx.blockNumber.toLocaleString()}</span></Row>
-          <Row label="USD Value"><span className="text-white font-bold">{formatUSD(tx.value)}</span></Row>
+          <Row label="Value"><span className="text-white font-bold">{fmt(tx.value)}</span></Row>
           <Row label="Amount"><span>{formatTokenAmount(tx.amount, tx.token)}</span></Row>
           {tx.gasUsed && <Row label="Gas Used"><span>{formatNumber(tx.gasUsed)}</span></Row>}
           {tx.gasPrice && <Row label="Gas Price"><span>{tx.gasPrice.toFixed(2)} gwei</span></Row>}

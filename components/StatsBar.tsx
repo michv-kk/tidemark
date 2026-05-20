@@ -1,7 +1,7 @@
 'use client';
 import React, { useMemo } from 'react';
 import { Transaction, ChainId } from '@/lib/types';
-import { formatUSD } from '@/lib/formatters';
+import { useCurrency } from '@/contexts/SettingsContext';
 import { TrendingUp, Zap, Activity, Layers, Radio } from 'lucide-react';
 
 interface Props {
@@ -31,6 +31,7 @@ function calcTransactionsPerMinute(txs: Transaction[]): number {
 }
 
 export default function StatsBar({ transactions, isLive, isLoading }: Props) {
+  const fmt = useCurrency();
   const stats = useMemo(() => ({
     volume: calcTotalVolume(transactions),
     maxTx: calcMaxTransaction(transactions),
@@ -42,13 +43,13 @@ export default function StatsBar({ transactions, isLive, isLoading }: Props) {
     {
       icon: <TrendingUp size={18} className="text-cyan-400" />,
       label: 'Total Volume 24h',
-      value: formatUSD(stats.volume, true),
+      value: fmt(stats.volume, true),
       sub: `${transactions.length} transactions`,
     },
     {
       icon: <Zap size={18} className="text-yellow-400" />,
       label: 'Largest TX (session)',
-      value: stats.maxTx ? formatUSD(stats.maxTx.value, true) : '—',
+      value: stats.maxTx ? fmt(stats.maxTx.value, true) : '—',
       sub: stats.maxTx ? `${stats.maxTx.token} on ${stats.maxTx.chain}` : 'No data',
     },
     {

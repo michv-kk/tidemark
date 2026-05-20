@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { AlertNotification, Transaction } from '@/lib/types';
 import { lookupWallet } from '@/lib/knownWallets';
-import { formatUSD } from '@/lib/formatters';
+import { useCurrency } from '@/contexts/SettingsContext';
 
 interface AlertsCtx {
   alerts: AlertNotification[];
@@ -19,6 +19,7 @@ const Ctx = createContext<AlertsCtx>({
 });
 
 export function AlertsProvider({ children }: { children: React.ReactNode }) {
+  const fmt = useCurrency();
   const [alerts, setAlerts] = useState<AlertNotification[]>([]);
   const [visibleAlerts, setVisibleAlerts] = useState<AlertNotification[]>([]);
   const timeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -36,7 +37,7 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
 
     const fromLabel = lookupWallet(tx.from)?.label;
     const toLabel = lookupWallet(tx.to)?.label;
-    const valueStr = formatUSD(tx.value, true);
+    const valueStr = fmt(tx.value, true);
 
     if (tx.value >= 10_000_000) {
       type = 'mega_whale';
@@ -69,7 +70,7 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
 
     const t = setTimeout(() => dismiss(notification.id), 8000);
     timeouts.current.set(notification.id, t);
-  }, [dismiss]);
+  }, [dismiss, fmt]);
 
   const markAllRead = useCallback(() => {
     setAlerts(prev => prev.map(a => ({ ...a, read: true })));
