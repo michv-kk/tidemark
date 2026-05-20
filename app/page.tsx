@@ -1,7 +1,6 @@
 'use client';
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import TransactionCard from '@/components/TransactionCard';
-import TransactionModal from '@/components/TransactionModal';
 import StatsBar from '@/components/StatsBar';
 import { Transaction, ChainId } from '@/lib/types';
 import { useRealTransactions } from '@/hooks/useRealTransactions';
@@ -174,11 +173,10 @@ function LoadingSkeleton() {
 }
 
 export default function DashboardPage() {
-  const { addTransactionAlert } = useAlerts();
+  const { addTransactionAlert, selectTx } = useAlerts();
   const [paused, setPaused] = useState(false);
   const [chainFilter, setChainFilter] = useState<ChainId | 'ALL'>('ALL');
   const [minValue, setMinValue] = useState(0);
-  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
   const { transactions, newTransactions, apiStatus, isLoading, isUsingFallback } = useRealTransactions();
 
@@ -197,8 +195,8 @@ export default function DashboardPage() {
   }, [newTransactions, addTransactionAlert]);
 
   const handleTxClick = useCallback((tx: Transaction) => {
-    setSelectedTx(tx);
-  }, []);
+    selectTx(tx);
+  }, [selectTx]);
 
   const filtered = useMemo(() => {
     if (paused) return [];
@@ -389,7 +387,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <TransactionModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
     </div>
   );
 }

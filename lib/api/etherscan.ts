@@ -55,6 +55,43 @@ const CHAIN_CONFIGS: ChainConfig[] = [
       { contractAddress: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', symbol: 'WETH',  decimals: 18, priceKey: 'eth' },
     ],
   },
+  {
+    chainId: '56',
+    label: 'BSC',
+    idPrefix: 'bsc',
+    tokens: [
+      { contractAddress: '0x55d398326f99059fF775485246999027B3197955', symbol: 'USDT',  decimals: 18 },
+      { contractAddress: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', symbol: 'USDC',  decimals: 18 },
+      { contractAddress: '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56', symbol: 'BUSD',  decimals: 18 },
+    ],
+  },
+  {
+    chainId: '137',
+    label: 'MATIC',
+    idPrefix: 'matic',
+    tokens: [
+      { contractAddress: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', symbol: 'USDC',  decimals: 6 },
+      { contractAddress: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', symbol: 'USDT',  decimals: 6 },
+    ],
+  },
+  {
+    chainId: '43114',
+    label: 'AVAX',
+    idPrefix: 'avax',
+    tokens: [
+      { contractAddress: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6', symbol: 'USDC',  decimals: 6 },
+      { contractAddress: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', symbol: 'USDT',  decimals: 6 },
+    ],
+  },
+  {
+    chainId: '10',
+    label: 'OP',
+    idPrefix: 'op',
+    tokens: [
+      { contractAddress: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', symbol: 'USDC',  decimals: 6 },
+      { contractAddress: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58', symbol: 'USDT',  decimals: 6 },
+    ],
+  },
 ];
 
 // ─── Prices ───────────────────────────────────────────────────────────────────

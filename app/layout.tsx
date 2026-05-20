@@ -6,6 +6,7 @@ import { AlertsProvider } from "@/contexts/AlertsContext";
 import Navbar from "@/components/Navbar";
 import TickerBar from "@/components/TickerBar";
 import AlertsSystem from "@/components/AlertsSystem";
+import GlobalModal from "@/components/GlobalModal";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {children}
             </main>
             <AlertsSystem />
+            <GlobalModal />
           </AlertsProvider>
         </SettingsProvider>
       </body>

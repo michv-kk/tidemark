@@ -11,18 +11,25 @@ interface AlertsCtx {
   addTransactionAlert: (tx: Transaction) => void;
   markAllRead: () => void;
   dismiss: (id: string) => void;
+  // Global selected transaction for the modal (accessible from any component)
+  selectedTx: Transaction | null;
+  selectTx: (tx: Transaction | null) => void;
 }
 
 const Ctx = createContext<AlertsCtx>({
   alerts: [], visibleAlerts: [], unreadCount: 0,
   addTransactionAlert: () => {}, markAllRead: () => {}, dismiss: () => {},
+  selectedTx: null, selectTx: () => {},
 });
 
 export function AlertsProvider({ children }: { children: React.ReactNode }) {
   const fmt = useCurrency();
   const [alerts, setAlerts] = useState<AlertNotification[]>([]);
   const [visibleAlerts, setVisibleAlerts] = useState<AlertNotification[]>([]);
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const timeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const selectTx = useCallback((tx: Transaction | null) => setSelectedTx(tx), []);
 
   const dismiss = useCallback((id: string) => {
     setVisibleAlerts(prev => prev.filter(a => a.id !== id));
@@ -79,7 +86,7 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
   const unreadCount = alerts.filter(a => !a.read).length;
 
   return (
-    <Ctx.Provider value={{ alerts, visibleAlerts, unreadCount, addTransactionAlert, markAllRead, dismiss }}>
+    <Ctx.Provider value={{ alerts, visibleAlerts, unreadCount, addTransactionAlert, markAllRead, dismiss, selectedTx, selectTx }}>
       {children}
     </Ctx.Provider>
   );
