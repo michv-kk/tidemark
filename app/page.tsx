@@ -8,7 +8,7 @@ import { useRealTransactions } from '@/hooks/useRealTransactions';
 import { useAlerts } from '@/contexts/AlertsContext';
 import { Filter, Pause, Play, Radio, AlertTriangle, Loader2, Wifi, WifiOff, ExternalLink } from 'lucide-react';
 
-const CHAINS: ChainId[] = ['ETH', 'BTC', 'BSC', 'SOL', 'ARB', 'MATIC', 'AVAX', 'OP'];
+const CHAINS: ChainId[] = ['ETH', 'BTC', 'ARB', 'BASE', 'SOL', 'BSC', 'MATIC', 'AVAX', 'OP'];
 const MIN_VALUES = [
   { label: 'All', value: 0 },
   { label: '$100K+', value: 100_000 },
@@ -243,7 +243,7 @@ export default function DashboardPage() {
             {(['etherscan', 'mempool'] as const).map(src => (
               <span
                 key={src}
-                title={src === 'etherscan' ? 'Ethereum whale txs' : 'Bitcoin mempool'}
+                title={src === 'etherscan' ? 'ETH · BASE · ARB whale txs via Etherscan V2' : 'Bitcoin mempool'}
                 className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border ${
                   apiStatus[src] === 'ok'
                     ? 'text-green-400 border-green-500/30 bg-green-500/10'
@@ -252,7 +252,7 @@ export default function DashboardPage() {
                     : 'text-red-400 border-red-500/30 bg-red-500/10'
                 }`}
               >
-                {src === 'etherscan' ? 'ETH' : 'BTC'}
+                {src === 'etherscan' ? 'EVM' : 'BTC'}
               </span>
             ))}
           </div>
@@ -267,7 +267,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold text-white">Whale Transaction Monitor</h1>
         <p className="text-gray-500 text-sm mt-1">
           {isLive
-            ? 'Live blockchain data from Etherscan & Mempool.space'
+            ? 'Live blockchain data — ETH · BASE · ARB via Etherscan V2 + BTC via Mempool.space'
             : isLoading
             ? 'Fetching real-time blockchain data...'
             : 'Unable to connect to blockchain APIs'}
