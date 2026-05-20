@@ -37,7 +37,7 @@ function isAddress(s: string): boolean {
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { unreadCount, alerts, markAllRead } = useAlerts();
+  const { unreadCount, alerts, markAllRead, selectTx } = useAlerts();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ id: string; symbol: string; name: string; rank: number }[]>([]);
@@ -159,10 +159,24 @@ export default function Navbar() {
                 ) : (
                   <div className="divide-y divide-white/5">
                     {alerts.slice(0, 50).map(a => (
-                      <div key={a.id} className={`px-4 py-3 ${a.read ? '' : 'bg-white/3'}`}>
+                      <div
+                        key={a.id}
+                        className={`px-4 py-3 transition-colors ${a.read ? '' : 'bg-white/[0.03]'} ${a.transaction ? 'cursor-pointer hover:bg-white/[0.07]' : ''}`}
+                        onClick={() => {
+                          if (a.transaction) {
+                            selectTx(a.transaction);
+                            setAlertsOpen(false);
+                          }
+                        }}
+                      >
                         <div className="text-white text-xs font-medium">{a.message}</div>
                         <div className="text-gray-500 text-xs mt-0.5">{a.detail}</div>
-                        <div className="text-gray-600 text-xs mt-0.5">{formatTimeAgo(a.timestamp)}</div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <div className="text-gray-600 text-xs">{formatTimeAgo(a.timestamp)}</div>
+                          {a.transaction && (
+                            <span className="text-[10px] text-cyan-500/60">tap to view →</span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

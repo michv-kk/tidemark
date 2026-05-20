@@ -201,6 +201,9 @@ async function fetchTokenTransfers(
 
 // ─── Public export ────────────────────────────────────────────────────────────
 
+const BATCH_SIZE  = 4;    // max parallel requests per batch
+const BATCH_DELAY = 1100; // ms between batches — stays under 5 req/s free-tier
+
 export async function fetchEtherscanTransactions(): Promise<Transaction[]> {
   const apiKey = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY;
   if (!apiKey) return [];
@@ -208,18 +211,25 @@ export async function fetchEtherscanTransactions(): Promise<Transaction[]> {
   const prices    = await getPrices();
   const oneDayAgo = Math.floor(Date.now() / 1000) - 86_400;
   const seen      = new Set<string>();
+  const all: Transaction[] = [];
 
-  // 10 total calls (4 ETH + 3 BASE + 3 ARB) — well within free-tier rate limit
+  // Build the full task list (1 task = 1 token contract on 1 chain)
   const tasks = CHAIN_CONFIGS.flatMap(chain =>
-    chain.tokens.map(token =>
-      fetchTokenTransfers(chain, token, apiKey, prices, oneDayAgo, seen)
-    )
+    chain.tokens.map(token => ({ chain, token }))
   );
 
-  const settled = await Promise.allSettled(tasks);
-  const all: Transaction[] = [];
-  for (const r of settled) {
-    if (r.status === 'fulfilled') all.push(...r.value);
+  // Fire in batches to stay within the Etherscan free-tier rate limit (5/s)
+  for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
+    if (i > 0) await new Promise(r => setTimeout(r, BATCH_DELAY));
+    const batch = tasks.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(({ chain, token }) =>
+        fetchTokenTransfers(chain, token, apiKey, prices, oneDayAgo, seen)
+      )
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled') all.push(...r.value);
+    }
   }
 
   return all.sort((a, b) => b.timestamp - a.timestamp);

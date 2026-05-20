@@ -33,7 +33,7 @@ export interface UseRealTransactionsResult {
 const ETHERSCAN_INTERVAL = 15_000;
 const MEMPOOL_INTERVAL  = 20_000;
 const SOLANA_INTERVAL   = 25_000;
-const MAX_TXS = 200;
+const MAX_TXS = 500;
 
 function calcStats(txs: Transaction[]): TransactionStats {
   const totalVolume = txs.reduce((sum, t) => sum + t.value, 0);

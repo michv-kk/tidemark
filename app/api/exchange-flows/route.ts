@@ -1,60 +1,105 @@
 import { NextResponse } from 'next/server';
 
-// Force dynamic so this route is never pre-rendered at build time.
-// Build servers have shared IPs that quickly hit Etherscan's rate limit.
-// At runtime each user request hits the Vercel Data Cache instead.
 export const dynamic = 'force-dynamic';
 export const maxDuration = 25;
 
 const ETHERSCAN_KEY = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY ?? '';
 
-// Verified active hot-wallet addresses (main deposit/withdrawal wallets)
+// Multiple verified hot-wallet addresses per exchange — we aggregate them all.
+// Using several addresses increases the chance of catching recent activity even
+// as exchanges rotate their wallets.
 const EXCHANGES = [
-  { name: 'Binance',  address: '0x28C6c06298d514Db089934071355E5743bf21d60', color: '#F0B90B', initials: 'BN' },
-  { name: 'Coinbase', address: '0x71660c4005BA85c37ccec55d0C4493E66Fe775d3', color: '#3B82F6', initials: 'CB' },
-  { name: 'Kraken',   address: '0x53d284357ec70cE289D6D64134DfAc8E511c8a3D', color: '#8B5CF6', initials: 'KR' },
-  { name: 'OKX',      address: '0x6cC5F688a315f3dC28A7781717a9A798a59fDA7b', color: '#00C8FF', initials: 'OX' },
+  {
+    name: 'Binance',
+    color: '#F0B90B',
+    initials: 'BN',
+    addresses: [
+      '0x28C6c06298d514Db089934071355E5743bf21d60', // Binance 14 (most active)
+      '0x21a31Ee1afC51d94C2eFcCAa2092aD1028285549', // Binance 15
+    ],
+  },
+  {
+    name: 'Coinbase',
+    color: '#3B82F6',
+    initials: 'CB',
+    addresses: [
+      '0xa9D1e08C7793af67e9d92fe308d5697FB81d3E43', // Coinbase 10
+      '0x77696bb39917C91A0c3908D577d5e322095425cA', // Coinbase Prime
+    ],
+  },
+  {
+    name: 'Kraken',
+    color: '#8B5CF6',
+    initials: 'KR',
+    addresses: [
+      '0xDA9dfA130Df4dE4673b89022EE50ff26f6EA73Cf', // Kraken 14 (most active)
+      '0x0A869d79a7052C7f1b55a8EbbEf6B81b1571bf4e', // Kraken 1
+    ],
+  },
+  {
+    name: 'OKX',
+    color: '#00C8FF',
+    initials: 'OX',
+    addresses: [
+      '0x98EC059Dc3aDFBdd63429454dEb14c482827F634', // OKX 2
+      '0x6cC5F688a315f3dC28A7781717a9A798a59fDA7b', // OKX 1
+    ],
+  },
 ];
 
 type Tx = { timeStamp: string; to: string; from: string; value: string; isError: string };
 
-async function fetchFlowForExchange(
-  exchange: typeof EXCHANGES[0],
-  delayMs = 0,
-): Promise<{
-  name: string; color: string; initials: string;
-  netEth: number; txCount: number; inEth: number; outEth: number;
-}> {
+async function fetchOneAddress(address: string, delayMs: number): Promise<Tx[]> {
   if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
 
   const url =
     `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist` +
-    `&address=${exchange.address}&page=1&offset=200&sort=desc` +
-    `&apikey=${ETHERSCAN_KEY}`;
+    `&address=${address}&page=1&offset=200&sort=desc&apikey=${ETHERSCAN_KEY}`;
 
-  const res = await fetch(url, { next: { revalidate: 60 } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  try {
+    const res = await fetch(url, { next: { revalidate: 60 } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data.status !== '1' && data.message !== 'No transactions found') return [];
+    return Array.isArray(data.result) ? data.result : [];
+  } catch {
+    return [];
+  }
+}
 
-  const data = await res.json();
-  // Etherscan returns status:'0' with result:[] when there are no txs — that's fine
-  if (data.status !== '1' && data.message !== 'No transactions found') {
-    throw new Error(data.message ?? `NOTOK (${exchange.name})`);
+async function fetchFlowForExchange(
+  exchange: typeof EXCHANGES[0],
+  startDelay: number,
+) {
+  const cutoff = Math.floor(Date.now() / 1000) - 86_400;
+
+  // Fetch all addresses for this exchange, staggered by 350ms each
+  const allTxs: Tx[] = [];
+  const results = await Promise.allSettled(
+    exchange.addresses.map((addr, i) => fetchOneAddress(addr, startDelay + i * 350))
+  );
+  for (const r of results) {
+    if (r.status === 'fulfilled') allTxs.push(...r.value);
   }
 
-  const cutoff = Math.floor(Date.now() / 1000) - 86_400;
-  const txList: Tx[] = Array.isArray(data.result) ? data.result : [];
-  const recent = txList.filter(
-    tx => parseInt(tx.timeStamp, 10) > cutoff && tx.isError === '0'
-  );
+  const allAddrsLower = new Set(exchange.addresses.map(a => a.toLowerCase()));
+  const seen = new Set<string>();
 
   let inEth = 0;
   let outEth = 0;
-  const addrLower = exchange.address.toLowerCase();
+  let txCount = 0;
 
-  for (const tx of recent) {
+  for (const tx of allTxs) {
+    if (seen.has(tx.timeStamp + tx.from + tx.value)) continue; // basic dedup
+    seen.add(tx.timeStamp + tx.from + tx.value);
+
+    if (parseInt(tx.timeStamp, 10) <= cutoff) continue;
+    if (tx.isError !== '0') continue;
+
     const val = parseInt(tx.value, 10) / 1e18;
-    if (tx.to?.toLowerCase() === addrLower) inEth += val;
+    if (allAddrsLower.has(tx.to?.toLowerCase())) inEth += val;
     else outEth += val;
+    txCount++;
   }
 
   return {
@@ -62,16 +107,16 @@ async function fetchFlowForExchange(
     color:    exchange.color,
     initials: exchange.initials,
     netEth:   inEth - outEth,
-    txCount:  recent.length,
+    txCount,
     inEth,
     outEth,
   };
 }
 
 export async function GET() {
-  // Stagger requests by 400 ms each — well within 5 req/s free-tier limit
+  // Stagger exchange groups by 800ms to stay within rate limit
   const results = await Promise.allSettled(
-    EXCHANGES.map((ex, i) => fetchFlowForExchange(ex, i * 400))
+    EXCHANGES.map((ex, i) => fetchFlowForExchange(ex, i * 800))
   );
 
   const flows = results.map((r, i) => {
