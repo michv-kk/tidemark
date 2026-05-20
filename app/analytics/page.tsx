@@ -337,10 +337,42 @@ function TrendingPanel() {
 // ─── Chain Activity ───────────────────────────────────────────────────────────
 
 function ChainActivityPanel() {
-  // Static representation — chain split from our real sources (ETH + BTC)
   const chains = [
-    { label: 'Ethereum (ETH)', source: 'Etherscan API', color: 'bg-blue-500', desc: 'ERC-20 & native ETH whale transactions' },
-    { label: 'Bitcoin (BTC)', source: 'Mempool.space API', color: 'bg-orange-500', desc: 'Large UTXO movements from mempool' },
+    {
+      label: 'Ethereum (ETH)',
+      source: 'Etherscan V2 API · chainid=1',
+      color: 'bg-blue-500',
+      desc: 'ERC-20 token transfers (USDC, USDT, WBTC) from Binance, Circle & Tether whale wallets',
+      interval: '15s',
+    },
+    {
+      label: 'Base (BASE)',
+      source: 'Etherscan V2 API · chainid=8453',
+      color: 'bg-indigo-500',
+      desc: 'USDC & WETH transfers from Coinbase institutional wallets and major Base whales',
+      interval: '15s',
+    },
+    {
+      label: 'Arbitrum (ARB)',
+      source: 'Etherscan V2 API · chainid=42161',
+      color: 'bg-cyan-500',
+      desc: 'USDC, USDT & WBTC flows from Binance, Wintermute and Jump Crypto on Arbitrum',
+      interval: '15s',
+    },
+    {
+      label: 'Bitcoin (BTC)',
+      source: 'Mempool.space API',
+      color: 'bg-orange-500',
+      desc: 'Large UTXO movements from the last 3 confirmed blocks (≥ 0.5 BTC)',
+      interval: '20s',
+    },
+    {
+      label: 'Solana (SOL)',
+      source: 'Solana mainnet public RPC',
+      color: 'bg-purple-500',
+      desc: 'USDC, USDT & native SOL transfers from Binance, Kraken and Jump Crypto whale wallets',
+      interval: '25s',
+    },
   ];
 
   return (
@@ -348,9 +380,14 @@ function ChainActivityPanel() {
       <div className="space-y-4">
         {chains.map(c => (
           <div key={c.label} className="flex items-start gap-3">
-            <div className={`w-2.5 h-2.5 rounded-full ${c.color} flex-shrink-0 mt-1`} />
+            <div className={`w-2.5 h-2.5 rounded-full ${c.color} flex-shrink-0 mt-1.5`} />
             <div className="flex-1">
-              <div className="text-white text-sm font-semibold">{c.label}</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-white text-sm font-semibold">{c.label}</div>
+                <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-white/5 text-gray-500 border border-white/5">
+                  every {c.interval}
+                </span>
+              </div>
               <div className="text-gray-400 text-xs mt-0.5">{c.desc}</div>
               <div className="text-gray-600 text-xs mt-0.5">Source: {c.source}</div>
             </div>
@@ -358,7 +395,7 @@ function ChainActivityPanel() {
         ))}
       </div>
       <div className="mt-4 pt-3 border-t border-white/5 text-xs text-gray-600">
-        Live transaction feed — updates every 15–20 seconds
+        5 chains · No API key needed for Solana · Same Etherscan key covers ETH, BASE &amp; ARB
       </div>
     </Card>
   );

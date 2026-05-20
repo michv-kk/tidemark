@@ -33,7 +33,7 @@ const T = {
     faq: [
       {
         q: 'Skąd pochodzą dane o transakcjach?',
-        a: 'Transakcje ETH pobierane są z Etherscan API V2 — śledzimy transfery tokenów (USDC, USDT, WBTC) z portfeli wielorybów takich jak Tether Treasury, Circle i aktywne portfele Binance. Transakcje BTC pobierane są z Mempool.space — analizujemy ostatnie potwierdzone bloki i filtrujemy transakcje powyżej 0.5 BTC. Wszystkie transakcje mają prawdziwe hashe — możesz je zweryfikować klikając ikonkę eksploratora przy każdej transakcji.',
+        a: 'ETH, Base i Arbitrum: pobierane z Etherscan API V2 (jeden klucz, trzy sieci) — śledzimy transfery USDC, USDT i WBTC z portfeli Binance, Circle i Tether. Bitcoin: Mempool.space, ostatnie 3 potwierdzone bloki, transakcje ≥ 0.5 BTC. Solana: publiczny RPC Solany (bez klucza API) — USDC, USDT i natywny SOL z portfeli Binance, Kraken i Jump Crypto. Każda transakcja ma prawdziwy hash — kliknij ikonkę eksploratora żeby zweryfikować.',
       },
       {
         q: 'Co to jest Whale (wieloryb)?',
@@ -41,7 +41,7 @@ const T = {
       },
       {
         q: 'Czy dane są 100% prawdziwe?',
-        a: 'Tak. Nie ma tu żadnych generowanych ani losowych danych. Każda transakcja ma prawdziwy hash blockchain, który możesz sprawdzić w Etherscan (ETH) lub Mempool.space (BTC). Ceny i dane rynkowe pochodzą z CoinGecko. Fear & Greed Index z Alternative.me. Funding rates z Binance Futures API.',
+        a: 'Tak. Zero generowanych danych. ETH/Base/ARB → Etherscan V2, BTC → Mempool.space, SOL → publiczny RPC Solany. Każdy hash możesz zweryfikować klikając ikonkę eksploratora. Ceny z CoinGecko, Fear & Greed z Alternative.me, Funding rates z Binance Futures.',
       },
       {
         q: 'Co to jest Fear & Greed Index?',
@@ -94,7 +94,7 @@ const T = {
     faq: [
       {
         q: 'Where does the transaction data come from?',
-        a: 'ETH transactions are fetched from the Etherscan V2 API — we track token transfers (USDC, USDT, WBTC) from whale wallets such as Tether Treasury, Circle, and active Binance hot wallets. BTC transactions come from Mempool.space — we parse the latest confirmed blocks and filter transactions above 0.5 BTC. Every transaction has a real blockchain hash you can verify by clicking the explorer icon next to it.',
+        a: 'ETH, Base and Arbitrum: fetched from the Etherscan V2 API (one key, three chains) — we track USDC, USDT and WBTC transfers from Binance, Circle and Tether whale wallets. Bitcoin: Mempool.space, last 3 confirmed blocks, transactions ≥ 0.5 BTC. Solana: public Solana RPC (no API key) — USDC, USDT and native SOL transfers from Binance, Kraken and Jump Crypto wallets. Every transaction hash is real and verifiable.',
       },
       {
         q: 'What is a Whale?',
@@ -102,7 +102,7 @@ const T = {
       },
       {
         q: 'Is the data 100% real?',
-        a: "Yes. There is no generated or random data here. Every transaction has a real blockchain hash you can verify on Etherscan (ETH) or Mempool.space (BTC). Market prices come from CoinGecko. The Fear & Greed Index from Alternative.me. Funding rates from the Binance Futures API.",
+        a: "Yes. Zero generated data. ETH/Base/ARB → Etherscan V2, BTC → Mempool.space, SOL → Solana public RPC. Every transaction hash is verifiable — click the explorer icon next to any transaction. Prices from CoinGecko, Fear & Greed from Alternative.me, Funding rates from Binance Futures.",
       },
       {
         q: 'What is the Fear & Greed Index?',
@@ -135,6 +135,7 @@ const T = {
 const DATA_SOURCES = [
   { name: 'Etherscan', desc_pl: 'Transakcje ETH, ceny gazu, historia portfeli', desc_en: 'ETH transactions, gas prices, wallet history', url: 'https://etherscan.io' },
   { name: 'Mempool.space', desc_pl: 'Potwierdzone transakcje Bitcoin', desc_en: 'Bitcoin confirmed block transactions', url: 'https://mempool.space' },
+  { name: 'Solana RPC', desc_pl: 'Transakcje SOL/USDC/USDT na Solanie', desc_en: 'SOL / USDC / USDT whale transfers on Solana', url: 'https://solana.com' },
   { name: 'CoinGecko', desc_pl: 'Ceny, market cappy, trending coins', desc_en: 'Prices, market caps, trending coins', url: 'https://coingecko.com' },
   { name: 'Binance Futures', desc_pl: 'Funding rates, open interest', desc_en: 'Funding rates, open interest', url: 'https://www.binance.com' },
   { name: 'Alternative.me', desc_pl: 'Fear & Greed Index', desc_en: 'Fear & Greed Index', url: 'https://alternative.me' },

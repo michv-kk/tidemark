@@ -7,9 +7,21 @@ interface SourceStatus { ok: boolean; label: string; fullName: string; url: stri
 
 async function checkEtherscan(): Promise<boolean> {
   try {
-    const r = await fetch("https://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey=NX35PINTFQXS4S542I3GA9I2G3DDZPV1FU", { signal: AbortSignal.timeout(5000) });
+    const r = await fetch("/api/gas", { signal: AbortSignal.timeout(5000) });
+    return r.ok;
+  } catch { return false; }
+}
+
+async function checkSolana(): Promise<boolean> {
+  try {
+    const r = await fetch("https://api.mainnet-beta.solana.com", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth" }),
+      signal: AbortSignal.timeout(5000),
+    });
     const d = await r.json();
-    return !!d.result;
+    return d.result === "ok";
   } catch { return false; }
 }
 
@@ -36,10 +48,11 @@ async function checkCoinGecko(): Promise<boolean> {
 }
 
 const SOURCES = [
-  { key: "etherscan",   label: "ETH", fullName: "Etherscan",    url: "etherscan.io",   check: checkEtherscan },
-  { key: "mempool",     label: "BTC", fullName: "Mempool.space", url: "mempool.space",  check: checkMempool },
-  { key: "dexscreener", label: "DEX", fullName: "DexScreener",  url: "dexscreener.com",check: checkDexScreener },
-  { key: "coingecko",   label: "CG",  fullName: "CoinGecko",    url: "coingecko.com",  check: checkCoinGecko },
+  { key: "etherscan",   label: "EVM", fullName: "Etherscan V2 (ETH · BASE · ARB)", url: "etherscan.io",              check: checkEtherscan },
+  { key: "mempool",     label: "BTC", fullName: "Mempool.space",                   url: "mempool.space",             check: checkMempool },
+  { key: "solana",      label: "SOL", fullName: "Solana public RPC",               url: "api.mainnet-beta.solana.com", check: checkSolana },
+  { key: "dexscreener", label: "DEX", fullName: "DexScreener",                     url: "dexscreener.com",           check: checkDexScreener },
+  { key: "coingecko",   label: "CG",  fullName: "CoinGecko",                       url: "coingecko.com",             check: checkCoinGecko },
 ] as const;
 
 export function ApiStatusBar() {
@@ -134,8 +147,8 @@ export function ApiStatusBar() {
           </div>
 
           <div className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] text-gray-600">
-            Transactions: Etherscan + Mempool + DexScreener<br />
-            Prices &amp; charts: CoinGecko (free tier)
+            Transactions: Etherscan V2 (ETH·BASE·ARB) + Mempool.space (BTC) + Solana RPC<br />
+            Prices &amp; charts: CoinGecko free tier
           </div>
         </div>
       )}

@@ -262,7 +262,12 @@ export default function TransactionModal({ tx, onClose }: Props) {
             className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 transition-colors border border-cyan-500/20 rounded-lg px-2.5 py-1.5 bg-cyan-500/5 hover:bg-cyan-500/10"
           >
             <ExternalLink size={11} />
-            {tx.source === 'dexscreener' ? 'View on DexScreener' : tx.chain === 'BTC' ? 'View on Mempool.space' : 'View on Block Explorer'}
+            {tx.source === 'dexscreener' ? 'View on DexScreener'
+              : tx.chain === 'BTC' ? 'View on Mempool.space'
+              : tx.chain === 'SOL' ? 'View on Solscan'
+              : tx.chain === 'BASE' ? 'View on Basescan'
+              : tx.chain === 'ARB' ? 'View on Arbiscan'
+              : 'View on Etherscan'}
           </a>
         </div>
 
