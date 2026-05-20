@@ -34,7 +34,7 @@ const TOKEN_PRICES: Record<string, number> = {
 
 const TX_TYPES: TxType[] = ['transfer', 'transfer', 'transfer', 'swap', 'swap', 'bridge', 'stake', 'unstake', 'liquidation'];
 
-let blockNumbers: Record<string, number> = {
+const blockNumbers: Record<string, number> = {
   ETH: 19_800_000, BTC: 840_000, BSC: 38_000_000, SOL: 280_000_000,
   ARB: 200_000_000, MATIC: 55_000_000, AVAX: 45_000_000, OP: 120_000_000,
 };

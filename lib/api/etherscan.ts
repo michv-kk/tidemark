@@ -1,32 +1,18 @@
 import { Transaction, TxType } from '../types';
-import { isExchangeWallet, lookupWallet } from '../knownWallets';
+import { isExchangeWallet } from '../knownWallets';
 
 // Etherscan V2 API (V1 deprecated)
 const ETHERSCAN_V2 = 'https://api.etherscan.io/v2/api';
 const CHAIN_ID = '1'; // Ethereum mainnet
 
-// Top ERC-20 tokens where whale activity is concentrated
+// Top ERC-20 tokens where whale activity is concentrated (used for reference)
 const WHALE_TOKENS = [
-  {
-    address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-    symbol: 'USDT',
-    decimals: 6,
-    minAmount: 100_000, // $100K minimum
-  },
-  {
-    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-    symbol: 'USDC',
-    decimals: 6,
-    minAmount: 100_000,
-  },
-  {
-    address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
-    symbol: 'WBTC',
-    decimals: 8,
-    minAmount: 0,
-    minUsd: 100_000, // $100K minimum
-  },
+  { address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', symbol: 'USDT', decimals: 6, minAmount: 100_000 },
+  { address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', symbol: 'USDC', decimals: 6, minAmount: 100_000 },
+  { address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', symbol: 'WBTC', decimals: 8, minAmount: 0 },
 ];
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+void WHALE_TOKENS;
 
 // Known large on-chain movers — queried for their token transfer history
 const WHALE_ADDRESSES_FOR_TOKENS = [

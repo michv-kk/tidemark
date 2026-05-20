@@ -180,7 +180,7 @@ export default function DashboardPage() {
   const [minValue, setMinValue] = useState(0);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
-  const { transactions, newTransactions, stats, apiStatus, isLoading, isUsingFallback } = useRealTransactions();
+  const { transactions, newTransactions, apiStatus, isLoading, isUsingFallback } = useRealTransactions();
 
   // Fire alerts for new whale transactions coming in from real sources
   const alertedIds = useRef(new Set<string>());

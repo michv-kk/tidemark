@@ -7,7 +7,7 @@ const PROXY = '/api/coingecko';
 const CACHE = new Map<string, { data: unknown; ts: number }>();
 const TTL = 45_000; // 45s cache to avoid hammering the proxy
 
-let pendingRequests = new Map<string, Promise<unknown>>();
+const pendingRequests = new Map<string, Promise<unknown>>();
 
 async function get<T>(path: string, ttl = TTL): Promise<T> {
   const cached = CACHE.get(path);

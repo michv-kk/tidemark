@@ -6,7 +6,6 @@ import { TradingViewWidget } from '@/components/TradingViewWidget';
 import { CoinData } from '@/lib/types';
 import { formatUSD, formatPercent, getChangeColor } from '@/lib/formatters';
 import { fetchTopCoins } from '@/lib/coingecko';
-import Image from 'next/image';
 
 const TOP_PAIRS = ['BTC', 'ETH', 'SOL', 'BNB', 'ARB', 'AVAX', 'MATIC', 'LINK', 'UNI', 'OP'];
 

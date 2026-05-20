@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { Loader2, ExternalLink, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ExternalLink, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

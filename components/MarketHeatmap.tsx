@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
-import { CoinData } from '@/lib/types';
+
 import { fetchTopCoins } from '@/lib/coingecko';
 
 function getHeatColor(change: number): string {
