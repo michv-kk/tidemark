@@ -18,7 +18,6 @@ function TradingViewWidgetInner({
   studies = [],
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const key = `${symbol}-${interval}`;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -62,7 +61,7 @@ function TradingViewWidgetInner({
     return () => {
       if (container) container.innerHTML = "";
     };
-  }, [key, height, theme, studies]);
+  }, [symbol, interval, height, theme, studies]);
 
   return (
     <div

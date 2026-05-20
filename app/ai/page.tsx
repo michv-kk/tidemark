@@ -7,7 +7,7 @@ import { lookupWallet } from '@/lib/knownWallets';
 import { Sparkles, Brain, Loader2, TrendingUp, Zap, AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
 
 interface AiResult {
-  insight: string;
+  insight: string | null;
   model: string;
   txCount: number;
   isMock: boolean;
@@ -184,7 +184,7 @@ export default function AiInsightsPage() {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactions: transactions.slice(0, 20) }),
+        body: JSON.stringify({ transactions: transactions.slice(0, 30) }),
       });
       const data = await res.json();
       setAiResult(data);
@@ -266,7 +266,11 @@ export default function AiInsightsPage() {
               </div>
             )}
             <div className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-              {aiResult.insight}
+              {aiResult.insight ?? (
+                <span className="text-orange-400">
+                  {aiResult.error ?? 'No analysis returned — check ANTHROPIC_API_KEY and try again.'}
+                </span>
+              )}
             </div>
             {lastAnalyzed && (
               <div className="flex items-center gap-1.5 text-xs text-gray-600">

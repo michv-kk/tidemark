@@ -1,5 +1,6 @@
 'use client';
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import GlobalMarketStats from '@/components/GlobalMarketStats';
 import MarketHeatmap from '@/components/MarketHeatmap';
 import { TradingViewWidget } from '@/components/TradingViewWidget';
@@ -101,8 +102,7 @@ export default function MarketsPage() {
                     <div key={c.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/3 transition-colors cursor-pointer"
                          onClick={() => { setSelectedPair(c.symbol.toUpperCase()); setTab('chart'); }}>
                       <div className="relative w-7 h-7 flex-shrink-0">
-                        <img src={c.image} alt={c.name} className="w-7 h-7 rounded-full" loading="lazy"
-                             onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        <Image src={c.image} alt={c.name} width={28} height={28} className="rounded-full" unoptimized />
                       </div>
                       <div className="flex-1">
                         <div className="text-white text-sm font-medium">{c.symbol.toUpperCase()}</div>
@@ -149,8 +149,7 @@ export default function MarketsPage() {
                         <td className="text-gray-600 text-xs">{i + 1}</td>
                         <td>
                           <div className="flex items-center gap-2">
-                            <img src={c.image} alt="" className="w-6 h-6 rounded-full" loading="lazy"
-                                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            <Image src={c.image} alt={c.name} width={24} height={24} className="rounded-full" unoptimized />
                             <span className="text-white font-medium">{c.symbol.toUpperCase()}</span>
                             <span className="text-gray-500 hidden sm:inline text-xs">{c.name}</span>
                           </div>
