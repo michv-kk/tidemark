@@ -32,7 +32,7 @@ export interface UseRealTransactionsResult {
 }
 
 const POLL_INTERVAL = 30_000;
-const MAX_TXS       = 1000;
+const MAX_TXS       = 10_000; // large enough to hold full 24h rolling window
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 

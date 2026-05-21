@@ -16,7 +16,7 @@ const REDIS_MAX         = 50_000;  // safety cap only — 24h rolling window is 
 const REDIS_TTL         = 25 * 3_600;  // 25h — slightly longer than cutoff so Redis never expires early
 const CUTOFF_MS         = 24 * 3_600_000; // 24h rolling window — auto-prunes old transactions
 const MIN_USD           = 100_000; // $100K minimum — show all whale transactions
-const BTC_WHALE_USD     = 1_000_000; // $1M+ threshold for Blockchair — covers 24h+ of mega-whale data
+const BTC_WHALE_USD     = 500_000;  // $500K threshold — ~100-200 txs/day → 100 results covers 12-24h
 
 // ─── Prices ───────────────────────────────────────────────────────────────────
 
@@ -231,13 +231,18 @@ async function fetchBitcoin(prices: Prices, seen: Set<string>): Promise<object[]
 
   if (!blockchairRateLimited) {
     try {
-      // Compute satoshi threshold dynamically from current BTC price
-      const satoshiMin = Math.round((BTC_WHALE_USD / prices.btc) * 1e8);
+      // output_total_usd filter works reliably on free tier to FIND transactions.
+      // We never rely on the returned output_total_usd value (can be null) —
+      // always compute USD from output_total (satoshis) × current BTC price.
       const url = 'https://api.blockchair.com/bitcoin/transactions' +
-        `?q=output_total(${satoshiMin}..)` +
+        `?q=output_total_usd(${BTC_WHALE_USD}..)` +
         '&s=time(desc)&limit=100' +
         '&fields=hash,time,output_total,output_total_usd,block_id';
-      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+      const res = await fetch(url, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(12_000),
+        headers: { 'Accept': 'application/json' },
+      });
       if (res.ok) {
         const data = await res.json();
         const txList: BlockchairTx[] = data?.data ?? [];
