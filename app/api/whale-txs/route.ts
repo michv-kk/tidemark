@@ -222,7 +222,7 @@ async function fetchBitcoin(
   const PAGES     = isSparse ? 1 : 4;  // pages per block (25 txs each)
 
   // ── Step 1: Gather block metadata ─────────────────────────────────────────
-  let allBlocks: MempoolBlock[] = [];
+  const allBlocks: MempoolBlock[] = [];
   try {
     const firstRes = await fetch('https://mempool.space/api/blocks', {
       cache: 'no-store', signal: AbortSignal.timeout(10_000),
