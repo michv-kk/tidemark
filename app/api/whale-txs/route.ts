@@ -10,7 +10,7 @@ const redis = (
     ? new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN })
     : null
 );
-const REDIS_KEY = 'tidemark_whale_txs_v2'; // bumped version to clear old cache
+const REDIS_KEY = 'tidemark_whale_txs_v1';
 const REDIS_MAX = 500;
 const REDIS_TTL = 48 * 3_600;
 const CUTOFF_MS = 48 * 3_600_000;
@@ -229,136 +229,68 @@ async function fetchRpcChain(chain: RpcChainCfg, prices: Prices, seen: Set<strin
   return results;
 }
 
-// ─── Strategy 4: Solana — direct RPC, server-side (goes into Redis) ───────────
+// ─── Strategy 4: Solana — server-side via Solscan public API ─────────────────
+// Uses Solscan's free public API to get recent large USDC / USDT / SOL transfers.
+// No API key needed, much lighter than parsing individual RPC transactions.
 
-const SOLANA_RPCS = [
-  'https://api.mainnet-beta.solana.com',
-  'https://rpc.ankr.com/solana',
-  'https://solana-api.projectserum.com',
+const SOLSCAN_TOKENS = [
+  { mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', symbol: 'USDC', decimals: 6 },
+  { mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', symbol: 'USDT', decimals: 6 },
 ];
 
-// Verified high-volume exchange / whale accounts on Solana mainnet
-const SOLANA_WHALE_ADDRESSES = [
-  '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM', // Binance hot wallet
-  '5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9', // Binance deposit wallet
-  'FWznbcNXWQuHTawe9RxvQ2LdCENssh12dsznf4RiouN5', // Kraken
-  'AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2', // Bybit
-  'GHaRmS5LCzCzJEPR7y1jQ7PXHNT5MExKahLQPaT6qMx', // OKX
-  'HN7cABqLq46Es1jh92dQQisAq662SmxELLLsHHe4YWrH', // Wintermute
-  'GThUX1Atko4tqhN2NaiTazWSeFWMoAA9HLyKm5Tc9FzR', // Jump Crypto
-  'HVh6wHNBAsG3pq1Bj5oCzRjoWKVogEDHwUHkRz3ekFgt', // large SOL whale
-];
-
-const SOL_MINTS: Record<string, string> = {
-  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: 'USDC',
-  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: 'USDT',
-  So11111111111111111111111111111111111111112:    'SOL',
-};
-
-async function solRpc<T>(method: string, params: unknown[]): Promise<T | null> {
-  for (const endpoint of SOLANA_RPCS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-        cache: 'no-store',
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (!res.ok) continue;
-      const json = await res.json();
-      if (json?.error?.code === -32005 || json?.error?.code === 429 || json?.error) continue;
-      return (json?.result as T) ?? null;
-    } catch { continue; }
-  }
-  return null;
-}
-
-interface SigInfo  { signature: string; blockTime: number | null; err: unknown; }
-interface TokBal   { accountIndex: number; mint: string; owner?: string; uiTokenAmount: { uiAmount: number | null }; }
-interface ParsedTx {
-  slot: number; blockTime: number | null;
-  meta: { err: unknown; preBalances: number[]; postBalances: number[];
-          preTokenBalances: TokBal[]; postTokenBalances: TokBal[] } | null;
-  transaction: { message: { accountKeys: Array<{ pubkey: string }> } };
+interface SolscanTransfer {
+  signature: string;
+  blockTime: number;
+  src: string;
+  dst: string;
+  amount: number;      // already in token units (not raw)
+  decimals: number;
 }
 
 async function fetchSolana(prices: Prices, seen: Set<string>): Promise<object[]> {
-  const oneDayAgo = Math.floor(Date.now() / 1000) - 86_400;
   const results: object[] = [];
+  const oneDayAgo = Math.floor(Date.now() / 1000) - 86_400;
 
-  const settled = await Promise.allSettled(
-    SOLANA_WHALE_ADDRESSES.map(async (address) => {
-      const sigs = await solRpc<SigInfo[]>('getSignaturesForAddress', [address, { limit: 15, commitment: 'finalized' }]);
-      if (!Array.isArray(sigs)) return [];
+  await Promise.allSettled(SOLSCAN_TOKENS.map(async (token) => {
+    try {
+      // Solscan public API — no key needed, returns recent SPL transfers
+      const url = `https://public-api.solscan.io/token/transfer` +
+        `?tokenAddress=${token.mint}&limit=50&offset=0`;
+      const res = await fetch(url, {
+        headers: { accept: 'application/json' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const transfers: SolscanTransfer[] = Array.isArray(data) ? data : (data?.data ?? []);
 
-      const recent = sigs.filter(s => !s.err && (s.blockTime ?? 0) > oneDayAgo).slice(0, 5);
-      if (recent.length === 0) return [];
+      for (const tx of transfers) {
+        if (!tx.signature || !tx.blockTime) continue;
+        if (tx.blockTime < oneDayAgo) continue;
 
-      const parsed = await Promise.allSettled(
-        recent.map(s => solRpc<ParsedTx>('getParsedTransaction', [
-          s.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'finalized' },
-        ]))
-      );
-
-      const addrRes: object[] = [];
-      for (let i = 0; i < parsed.length; i++) {
-        const r = parsed[i];
-        if (r.status !== 'fulfilled' || !r.value) continue;
-        const tx = r.value;
-        if (!tx.meta || tx.meta.err) continue;
-
-        const id = `sol-${recent[i].signature}`;
+        const id = `sol-${tx.signature}`;
         if (seen.has(id)) continue;
 
-        const keys = tx.transaction.message.accountKeys.map(k => k.pubkey);
-        const pre  = tx.meta.preTokenBalances  ?? [];
-        const post = tx.meta.postTokenBalances ?? [];
+        // amount is already in token units from Solscan
+        const amount = typeof tx.amount === 'number'
+          ? tx.amount / Math.pow(10, tx.decimals ?? token.decimals)
+          : 0;
+        const usd = amount; // USDC/USDT ≈ 1:1
 
-        let bestUsd = 0, bestSymbol = 'SOL', bestAmount = 0, bestFrom = address, bestTo = '';
-
-        // SPL token transfers
-        for (const pb of post) {
-          const sym = SOL_MINTS[pb.mint];
-          if (!sym || sym === 'SOL') continue;
-          const preBal = pre.find(p => p.accountIndex === pb.accountIndex);
-          const delta  = (pb.uiTokenAmount?.uiAmount ?? 0) - (preBal?.uiTokenAmount?.uiAmount ?? 0);
-          if (Math.abs(delta) < 0.01) continue;
-          const usd = Math.abs(delta); // stablecoins: 1:1
-          if (usd > bestUsd) {
-            bestUsd = usd; bestSymbol = sym; bestAmount = Math.abs(delta);
-            bestFrom = delta < 0 ? (pb.owner ?? address) : 'unknown';
-            bestTo   = delta > 0 ? (pb.owner ?? 'unknown') : 'unknown';
-          }
-        }
-
-        // Native SOL
-        const preSOL = tx.meta.preBalances, postSOL = tx.meta.postBalances;
-        for (let j = 0; j < keys.length; j++) {
-          const delta = (postSOL[j] ?? 0) - (preSOL[j] ?? 0);
-          if (delta <= 0) continue;
-          const solAmt = delta / 1e9;
-          const usd    = solAmt * prices.sol;
-          if (usd > bestUsd) {
-            bestUsd = usd; bestSymbol = 'SOL'; bestAmount = solAmt;
-            bestFrom = address; bestTo = keys[j];
-          }
-        }
-
-        if (bestUsd < MIN_USD) continue;
+        if (usd < MIN_USD) continue;
         seen.add(id);
-        addrRes.push({ id, hash: recent[i].signature, chain: 'SOL',
-          from: bestFrom, to: bestTo, value: bestUsd, amount: bestAmount, token: bestSymbol,
-          timestamp: (tx.blockTime ?? 0) * 1000, blockNumber: tx.slot ?? 0,
-          type: 'transfer', isWhale: bestUsd >= 500_000, source: 'solana' });
+        results.push({
+          id, hash: tx.signature, chain: 'SOL',
+          from: tx.src ?? 'unknown', to: tx.dst ?? 'unknown',
+          value: usd, amount, token: token.symbol,
+          timestamp: tx.blockTime * 1000, blockNumber: 0,
+          type: 'transfer', isWhale: usd >= 500_000, source: 'solana',
+        });
       }
-      return addrRes;
-    })
-  );
+    } catch { /* Solscan unavailable — skip */ }
+  }));
 
-  for (const r of settled) {
-    if (r.status === 'fulfilled') results.push(...r.value);
-  }
   return results;
 }
 
