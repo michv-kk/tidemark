@@ -207,24 +207,34 @@ interface BlockchairTx {
   block_id: number;
 }
 
+type MempoolTx = {
+  txid: string;
+  vin:  Array<{ prevout?: { scriptpubkey_address?: string; value?: number } }>;
+  vout: Array<{ scriptpubkey_address?: string; value?: number }>;
+  status?: { block_height?: number; block_time?: number };
+};
+
 async function fetchBitcoin(prices: Prices, seen: Set<string>): Promise<object[]> {
   const results: object[] = [];
 
-  // ── 1. Blockchair: $1M+ BTC transactions (rate-limited to 1× per 5 min via Redis TTL) ──
-  // $1M+ threshold means ~10-50 transactions/day globally → 100 results covers 2-10 days.
-  // This reliably captures the large whale transactions ($400M etc.) going back 24h+.
+  // ── 1. Blockchair: $1M+ BTC transactions (rate-limited to 1× per 2 min via Redis TTL) ─────
+  // Filter by OUTPUT_TOTAL in satoshis — much more reliable than output_total_usd on free tier.
+  // output_total_usd can be null for recent txs, causing silent USD filter failures.
+  // At ~$100K BTC price: 1B satoshis = 10 BTC ≈ $1M — covers 2-10 days of global whale txs.
   let blockchairRateLimited = false;
   if (redis) {
     try {
       const last = await redis.get<number>(REDIS_BLOCKCHAIR);
-      blockchairRateLimited = last !== null && (Date.now() - last) < 5 * 60_000;
+      blockchairRateLimited = last !== null && (Date.now() - last) < 2 * 60_000;
     } catch { /* ignore */ }
   }
 
   if (!blockchairRateLimited) {
     try {
+      // Compute satoshi threshold dynamically from current BTC price
+      const satoshiMin = Math.round((BTC_WHALE_USD / prices.btc) * 1e8);
       const url = 'https://api.blockchair.com/bitcoin/transactions' +
-        `?q=output_total_usd(${BTC_WHALE_USD}..)` +
+        `?q=output_total(${satoshiMin}..)` +
         '&s=time(desc)&limit=100' +
         '&fields=hash,time,output_total,output_total_usd,block_id';
       const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
@@ -234,7 +244,11 @@ async function fetchBitcoin(prices: Prices, seen: Set<string>): Promise<object[]
         for (const tx of txList) {
           const id = `btc-${tx.hash}`;
           if (seen.has(id)) continue;
-          const usd = tx.output_total_usd ?? 0;
+          // CRITICAL FIX: output_total_usd is often null on free tier → always derive from satoshis
+          const btcAmt = (tx.output_total ?? 0) / 1e8;
+          const usd    = (tx.output_total_usd != null && tx.output_total_usd > 0)
+                           ? tx.output_total_usd
+                           : btcAmt * prices.btc;
           if (usd < MIN_USD) continue;
           const ts = tx.time ? new Date(tx.time.replace(' ', 'T') + 'Z').getTime() : 0;
           if (!ts) continue;
@@ -242,18 +256,23 @@ async function fetchBitcoin(prices: Prices, seen: Set<string>): Promise<object[]
           results.push({
             id, hash: tx.hash, chain: 'BTC',
             from: 'multiple inputs', to: 'multiple outputs',
-            value: usd, amount: (tx.output_total ?? 0) / 1e8, token: 'BTC',
+            value: usd, amount: btcAmt, token: 'BTC',
             timestamp: ts, blockNumber: tx.block_id ?? 0,
             type: 'transfer', isWhale: usd >= 500_000, source: 'blockchair',
           });
         }
-        // Record timestamp to rate-limit next call
-        if (redis) redis.set(REDIS_BLOCKCHAIR, Date.now(), { ex: 300 }).catch(() => {});
+        if (redis) redis.set(REDIS_BLOCKCHAIR, Date.now(), { ex: 120 }).catch(() => {});
       }
     } catch { /* Blockchair unavailable */ }
   }
 
-  // ── 2. mempool.space: recent blocks, catches $50K-$1M BTC txs not in Blockchair ──
+  // ── 2. mempool.space: paginate ALL txs in recent blocks (not just first 25 by fee) ─────────
+  // mempool.space sorts /txs/0 by fee rate — whale txs with normal fees appear in later pages.
+  // We paginate every 25-tx page until we've scanned the whole block or hit a 24h cutoff.
+  // Fetching last 6 blocks × all pages — each block has ~2000-3000 txs = up to 120 pages.
+  // We cap at 8 pages/block (200 txs) to avoid timeout; large-value txs tend to pay higher fees
+  // so they are usually found in the first few pages anyway.
+  const cutoffMs = Date.now() - CUTOFF_MS;
   try {
     const blocksRes = await fetch('https://mempool.space/api/blocks', {
       cache: 'no-store', signal: AbortSignal.timeout(10_000),
@@ -261,43 +280,49 @@ async function fetchBitcoin(prices: Prices, seen: Set<string>): Promise<object[]
     if (blocksRes.ok) {
       const blocks: Array<{ id: string; height: number; timestamp: number }> = await blocksRes.json();
       if (Array.isArray(blocks)) {
+        // Only process blocks within our 24h window
+        const recentBlocks = blocks.filter(b => b.timestamp * 1000 > cutoffMs).slice(0, 6);
+
         const blockResults = await Promise.allSettled(
-          blocks.slice(0, 6).map(async (block) => {
-            try {
-              const res = await fetch(`https://mempool.space/api/block/${block.id}/txs/0`, {
-                cache: 'no-store', signal: AbortSignal.timeout(10_000),
+          recentBlocks.map(async (block) => {
+            const out: MempoolTx[] = [];
+            // Paginate through the block (25 txs per page, max 8 pages = 200 txs)
+            for (let page = 0; page < 8; page++) {
+              try {
+                const res = await fetch(
+                  `https://mempool.space/api/block/${block.id}/txs/${page * 25}`,
+                  { cache: 'no-store', signal: AbortSignal.timeout(8_000) },
+                );
+                if (!res.ok) break;
+                const txs: MempoolTx[] = await res.json();
+                if (!Array.isArray(txs) || txs.length === 0) break;
+                out.push(...txs);
+                if (txs.length < 25) break; // last page
+              } catch { break; }
+            }
+
+            const pageResults: object[] = [];
+            for (const tx of out) {
+              const id = `btc-${tx.txid}`;
+              if (seen.has(id)) continue;
+              const totalSats = tx.vout.reduce((s, o) => s + (o.value ?? 0), 0);
+              const btcAmt   = totalSats / 1e8;
+              const usd      = btcAmt * prices.btc;
+              if (usd < MIN_USD) continue;
+              const blockTime = tx.status?.block_time;
+              if (!blockTime) continue;
+              seen.add(id);
+              pageResults.push({
+                id, hash: tx.txid, chain: 'BTC',
+                from: tx.vin?.[0]?.prevout?.scriptpubkey_address ?? 'unknown',
+                to:   tx.vout?.[0]?.scriptpubkey_address ?? 'unknown',
+                value: usd, amount: btcAmt, token: 'BTC',
+                timestamp: blockTime * 1000,
+                blockNumber: tx.status?.block_height ?? 0,
+                type: 'transfer', isWhale: usd >= 500_000, source: 'mempool',
               });
-              if (!res.ok) return [];
-              const txs: Array<{
-                txid: string;
-                vin:  Array<{ prevout?: { scriptpubkey_address?: string; value?: number } }>;
-                vout: Array<{ scriptpubkey_address?: string; value?: number }>;
-                status?: { block_height?: number; block_time?: number };
-              }> = await res.json();
-              if (!Array.isArray(txs)) return [];
-              const out: object[] = [];
-              for (const tx of txs) {
-                const id = `btc-${tx.txid}`;
-                if (seen.has(id)) continue;
-                const totalSats = tx.vout.reduce((s, o) => s + (o.value ?? 0), 0);
-                const btcAmt   = totalSats / 1e8;
-                const usd      = btcAmt * prices.btc;
-                if (usd < MIN_USD) continue;
-                const blockTime = tx.status?.block_time;
-                if (!blockTime) continue;
-                seen.add(id);
-                out.push({
-                  id, hash: tx.txid, chain: 'BTC',
-                  from: tx.vin?.[0]?.prevout?.scriptpubkey_address ?? 'unknown',
-                  to:   tx.vout?.[0]?.scriptpubkey_address ?? 'unknown',
-                  value: usd, amount: btcAmt, token: 'BTC',
-                  timestamp: blockTime * 1000,
-                  blockNumber: tx.status?.block_height ?? 0,
-                  type: 'transfer', isWhale: usd >= 500_000, source: 'mempool',
-                });
-              }
-              return out;
-            } catch { return []; }
+            }
+            return pageResults;
           })
         );
         for (const r of blockResults) {
