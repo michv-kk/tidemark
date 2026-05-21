@@ -48,9 +48,9 @@ export default function StatsBar({ transactions, isLive, isLoading }: Props) {
   const cards = [
     {
       icon: <TrendingUp size={18} className="text-cyan-400" />,
-      label: 'Total Volume 24h',
+      label: 'Total Volume',
       value: fmt(stats.vol24h.volume, true),
-      sub: `${stats.vol24h.count} transactions (24h)`,
+      sub: `${stats.vol24h.count} txs · ETH/BSC/ARB/MATIC/AVAX 6h · BTC 1h`,
     },
     {
       icon: <Zap size={18} className="text-yellow-400" />,
