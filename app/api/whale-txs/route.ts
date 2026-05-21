@@ -10,13 +10,11 @@ const redis = (
     ? new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN })
     : null
 );
-const REDIS_KEY         = 'tidemark_whale_txs_v1';
-const REDIS_BLOCKCHAIR  = 'tidemark_blockchair_ts'; // rate-limit key for Blockchair
-const REDIS_MAX         = 50_000;  // safety cap only — 24h rolling window is the real limit
-const REDIS_TTL         = 25 * 3_600;  // 25h — slightly longer than cutoff so Redis never expires early
-const CUTOFF_MS         = 24 * 3_600_000; // 24h rolling window — auto-prunes old transactions
-const MIN_USD           = 100_000; // $100K minimum — show all whale transactions
-const BTC_WHALE_USD     = 500_000;  // $500K threshold — ~100-200 txs/day → 100 results covers 12-24h
+const REDIS_KEY = 'tidemark_whale_txs_v1';
+const REDIS_MAX = 50_000;  // safety cap only — 24h rolling window is the real limit
+const REDIS_TTL = 25 * 3_600;  // 25h — slightly longer than cutoff so Redis never expires early
+const CUTOFF_MS = 24 * 3_600_000; // 24h rolling window — auto-prunes old transactions
+const MIN_USD   = 100_000; // $100K minimum — all whale transactions
 
 // ─── Prices ───────────────────────────────────────────────────────────────────
 
@@ -193,20 +191,19 @@ async function fetchRpcChain(chain: RpcChainCfg, prices: Prices, seen: Set<strin
   return results;
 }
 
-// ─── Strategy 3: Bitcoin via Blockchair (server-side → Redis) ────────────────
-// Blockchair free API returns up to 100 recent large BTC transactions in one call,
-// covering ~24–48 h of history. Only called when Redis BTC data is thin (<20 txs)
-// to stay well within free-tier limits (~2 calls/day in steady state).
+// ─── Strategy 3: Bitcoin via mempool.space ───────────────────────────────────
+// Two modes depending on how many BTC txs are already in Redis:
+//
+//  SPARSE  (storedBtcCount < 60) — first deploy or after a Redis wipe:
+//    Fetch 72 blocks (≈ 12h) in parallel, 1 page each (25 txs, highest-fee).
+//    High-value transactions typically pay competitive fees → they appear here.
+//    One call seeds Redis with 12h of BTC history immediately.
+//
+//  NORMAL  (storedBtcCount ≥ 60) — steady state:
+//    Fetch 6 most recent blocks (≈ 1h), 4 pages each (100 txs).
+//    Redis rolling window fills the rest of the 24h window.
 
-interface BlockchairTx {
-  hash: string;
-  time: string;            // "2025-01-01 12:00:00"
-  input_total: number;     // satoshis
-  output_total: number;    // satoshis
-  output_total_usd: number;
-  block_id: number;
-}
-
+type MempoolBlock = { id: string; height: number; timestamp: number };
 type MempoolTx = {
   txid: string;
   vin:  Array<{ prevout?: { scriptpubkey_address?: string; value?: number } }>;
@@ -214,129 +211,92 @@ type MempoolTx = {
   status?: { block_height?: number; block_time?: number };
 };
 
-async function fetchBitcoin(prices: Prices, seen: Set<string>): Promise<object[]> {
+async function fetchBitcoin(
+  prices: Prices,
+  seen: Set<string>,
+  storedBtcCount: number,
+): Promise<object[]> {
   const results: object[] = [];
+  const cutoffMs  = Date.now() - CUTOFF_MS;
+  const isSparse  = storedBtcCount < 60;
+  const PAGES     = isSparse ? 1 : 4;  // pages per block (25 txs each)
 
-  // ── 1. Blockchair: $1M+ BTC transactions (rate-limited to 1× per 2 min via Redis TTL) ─────
-  // Filter by OUTPUT_TOTAL in satoshis — much more reliable than output_total_usd on free tier.
-  // output_total_usd can be null for recent txs, causing silent USD filter failures.
-  // At ~$100K BTC price: 1B satoshis = 10 BTC ≈ $1M — covers 2-10 days of global whale txs.
-  let blockchairRateLimited = false;
-  if (redis) {
-    try {
-      const last = await redis.get<number>(REDIS_BLOCKCHAIR);
-      blockchairRateLimited = last !== null && (Date.now() - last) < 2 * 60_000;
-    } catch { /* ignore */ }
-  }
-
-  if (!blockchairRateLimited) {
-    try {
-      // output_total_usd filter works reliably on free tier to FIND transactions.
-      // We never rely on the returned output_total_usd value (can be null) —
-      // always compute USD from output_total (satoshis) × current BTC price.
-      const url = 'https://api.blockchair.com/bitcoin/transactions' +
-        `?q=output_total_usd(${BTC_WHALE_USD}..)` +
-        '&s=time(desc)&limit=100' +
-        '&fields=hash,time,output_total,output_total_usd,block_id';
-      const res = await fetch(url, {
-        cache: 'no-store',
-        signal: AbortSignal.timeout(12_000),
-        headers: { 'Accept': 'application/json' },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const txList: BlockchairTx[] = data?.data ?? [];
-        for (const tx of txList) {
-          const id = `btc-${tx.hash}`;
-          if (seen.has(id)) continue;
-          // CRITICAL FIX: output_total_usd is often null on free tier → always derive from satoshis
-          const btcAmt = (tx.output_total ?? 0) / 1e8;
-          const usd    = (tx.output_total_usd != null && tx.output_total_usd > 0)
-                           ? tx.output_total_usd
-                           : btcAmt * prices.btc;
-          if (usd < MIN_USD) continue;
-          const ts = tx.time ? new Date(tx.time.replace(' ', 'T') + 'Z').getTime() : 0;
-          if (!ts) continue;
-          seen.add(id);
-          results.push({
-            id, hash: tx.hash, chain: 'BTC',
-            from: 'multiple inputs', to: 'multiple outputs',
-            value: usd, amount: btcAmt, token: 'BTC',
-            timestamp: ts, blockNumber: tx.block_id ?? 0,
-            type: 'transfer', isWhale: usd >= 500_000, source: 'blockchair',
-          });
-        }
-        if (redis) redis.set(REDIS_BLOCKCHAIR, Date.now(), { ex: 120 }).catch(() => {});
-      }
-    } catch { /* Blockchair unavailable */ }
-  }
-
-  // ── 2. mempool.space: paginate ALL txs in recent blocks (not just first 25 by fee) ─────────
-  // mempool.space sorts /txs/0 by fee rate — whale txs with normal fees appear in later pages.
-  // We paginate every 25-tx page until we've scanned the whole block or hit a 24h cutoff.
-  // Fetching last 6 blocks × all pages — each block has ~2000-3000 txs = up to 120 pages.
-  // We cap at 8 pages/block (200 txs) to avoid timeout; large-value txs tend to pay higher fees
-  // so they are usually found in the first few pages anyway.
-  const cutoffMs = Date.now() - CUTOFF_MS;
+  // ── Step 1: Gather block metadata ─────────────────────────────────────────
+  let allBlocks: MempoolBlock[] = [];
   try {
-    const blocksRes = await fetch('https://mempool.space/api/blocks', {
+    const firstRes = await fetch('https://mempool.space/api/blocks', {
       cache: 'no-store', signal: AbortSignal.timeout(10_000),
     });
-    if (blocksRes.ok) {
-      const blocks: Array<{ id: string; height: number; timestamp: number }> = await blocksRes.json();
-      if (Array.isArray(blocks)) {
-        // Only process blocks within our 24h window
-        const recentBlocks = blocks.filter(b => b.timestamp * 1000 > cutoffMs).slice(0, 6);
+    if (!firstRes.ok) return results;
+    const firstBatch: MempoolBlock[] = await firstRes.json();
+    if (!Array.isArray(firstBatch) || firstBatch.length === 0) return results;
+    allBlocks.push(...firstBatch);
 
-        const blockResults = await Promise.allSettled(
-          recentBlocks.map(async (block) => {
-            const out: MempoolTx[] = [];
-            // Paginate through the block (25 txs per page, max 8 pages = 200 txs)
-            for (let page = 0; page < 8; page++) {
-              try {
-                const res = await fetch(
-                  `https://mempool.space/api/block/${block.id}/txs/${page * 25}`,
-                  { cache: 'no-store', signal: AbortSignal.timeout(8_000) },
-                );
-                if (!res.ok) break;
-                const txs: MempoolTx[] = await res.json();
-                if (!Array.isArray(txs) || txs.length === 0) break;
-                out.push(...txs);
-                if (txs.length < 25) break; // last page
-              } catch { break; }
-            }
-
-            const pageResults: object[] = [];
-            for (const tx of out) {
-              const id = `btc-${tx.txid}`;
-              if (seen.has(id)) continue;
-              const totalSats = tx.vout.reduce((s, o) => s + (o.value ?? 0), 0);
-              const btcAmt   = totalSats / 1e8;
-              const usd      = btcAmt * prices.btc;
-              if (usd < MIN_USD) continue;
-              const blockTime = tx.status?.block_time;
-              if (!blockTime) continue;
-              seen.add(id);
-              pageResults.push({
-                id, hash: tx.txid, chain: 'BTC',
-                from: tx.vin?.[0]?.prevout?.scriptpubkey_address ?? 'unknown',
-                to:   tx.vout?.[0]?.scriptpubkey_address ?? 'unknown',
-                value: usd, amount: btcAmt, token: 'BTC',
-                timestamp: blockTime * 1000,
-                blockNumber: tx.status?.block_height ?? 0,
-                type: 'transfer', isWhale: usd >= 500_000, source: 'mempool',
-              });
-            }
-            return pageResults;
-          })
-        );
-        for (const r of blockResults) {
-          if (r.status === 'fulfilled') results.push(...r.value);
-        }
+    if (isSparse) {
+      // Fetch additional batches (going backwards) in parallel to cover ≈12h
+      const oldestHeight = firstBatch[firstBatch.length - 1].height - 1;
+      const extraBatches = 7; // 7 × 10 = 70 more blocks → total 80, use 72 within 24h
+      const batchResults = await Promise.allSettled(
+        Array.from({ length: extraBatches }, (_, i) =>
+          fetch(`https://mempool.space/api/blocks/${oldestHeight - i * 10}`, {
+            cache: 'no-store', signal: AbortSignal.timeout(10_000),
+          }).then(r => r.ok ? r.json() as Promise<MempoolBlock[]> : [])
+        )
+      );
+      for (const r of batchResults) {
+        if (r.status === 'fulfilled' && Array.isArray(r.value)) allBlocks.push(...r.value);
       }
     }
-  } catch { /* mempool.space unavailable */ }
+  } catch { return results; }
 
+  // Filter to within 24h window and cap
+  const targetBlocks = allBlocks
+    .filter(b => b.timestamp * 1000 > cutoffMs)
+    .slice(0, isSparse ? 72 : 6);
+
+  // ── Step 2: Fetch transactions for every block in parallel ─────────────────
+  // All blocks AND all pages within each block run concurrently.
+  const blockResults = await Promise.allSettled(
+    targetBlocks.map(async (block) => {
+      const pageFetches = await Promise.allSettled(
+        Array.from({ length: PAGES }, (_, page) =>
+          fetch(`https://mempool.space/api/block/${block.id}/txs/${page * 25}`, {
+            cache: 'no-store', signal: AbortSignal.timeout(8_000),
+          }).then(r => r.ok ? r.json() as Promise<MempoolTx[]> : [])
+        )
+      );
+
+      const out: object[] = [];
+      for (const pf of pageFetches) {
+        if (pf.status !== 'fulfilled' || !Array.isArray(pf.value)) continue;
+        for (const tx of pf.value) {
+          const id = `btc-${tx.txid}`;
+          if (seen.has(id)) continue;
+          const totalSats = tx.vout.reduce((s, o) => s + (o.value ?? 0), 0);
+          const btcAmt   = totalSats / 1e8;
+          const usd      = btcAmt * prices.btc;
+          if (usd < MIN_USD) continue;
+          const blockTime = tx.status?.block_time;
+          if (!blockTime) continue;
+          seen.add(id);
+          out.push({
+            id, hash: tx.txid, chain: 'BTC',
+            from: tx.vin?.[0]?.prevout?.scriptpubkey_address ?? 'unknown',
+            to:   tx.vout?.[0]?.scriptpubkey_address ?? 'unknown',
+            value: usd, amount: btcAmt, token: 'BTC',
+            timestamp: blockTime * 1000,
+            blockNumber: tx.status?.block_height ?? 0,
+            type: 'transfer', isWhale: usd >= 500_000, source: 'mempool',
+          });
+        }
+      }
+      return out;
+    })
+  );
+
+  for (const r of blockResults) {
+    if (r.status === 'fulfilled') results.push(...r.value);
+  }
   return results;
 }
 
@@ -347,30 +307,23 @@ export async function GET() {
   const prices: Prices = pricesResult.status === 'fulfilled' ? pricesResult.value : { btc: 77_000, eth: 2_500 };
   const oneDayAgo = Math.floor(Date.now() / 1000) - 86_400;
 
-  // 1. Load stored history from Redis — merge v1 + v2 so no transactions are lost
-  type TxRecord = { id: string; timestamp: number; [k: string]: unknown };
+  // 1. Load stored history from Redis
+  type TxRecord = { id: string; timestamp: number; chain?: string; [k: string]: unknown };
   let stored: TxRecord[] = [];
   if (redis) {
     try {
-      const [v1Data, v2Data] = await Promise.all([
-        redis.get<TxRecord[]>('tidemark_whale_txs_v1'),
-        redis.get<TxRecord[]>('tidemark_whale_txs_v2'),
-      ]);
-      const combined = [...(v1Data ?? []), ...(v2Data ?? [])];
-      const byId = new Map<string, TxRecord>();
-      for (const t of combined) byId.set(t.id, t);
+      const v1Data = await redis.get<TxRecord[]>(REDIS_KEY);
       const cutoffLoad = Date.now() - CUTOFF_MS;
-      stored = Array.from(byId.values())
+      stored = (v1Data ?? [])
         .filter(t => t.timestamp > cutoffLoad)
         .sort((a, b) => b.timestamp - a.timestamp);
-      if (v2Data && v2Data.length > 0) {
-        await redis.del('tidemark_whale_txs_v2').catch(() => {});
-      }
     } catch { stored = []; }
   }
 
-  const seen     = new Set<string>(stored.map(t => t.id));
+  const seen         = new Set<string>(stored.map(t => t.id));
   const freshTxs: object[] = [];
+  // How many BTC txs are already stored — determines sparse vs normal fetch mode
+  const storedBtcCount = stored.filter(t => t.chain === 'BTC').length;
 
   // 2. Fetch all chains in parallel
   const [ethResults, rpcResults, btcResult] = await Promise.allSettled([
@@ -382,8 +335,8 @@ export async function GET() {
     // eth_getLogs RPC — BSC, AVAX
     Promise.allSettled(RPC_CHAINS.map(c => fetchRpcChain(c, prices, seen))),
 
-    // Bitcoin — Blockchair (rate-limited via Redis TTL) + mempool.space recent blocks
-    fetchBitcoin(prices, seen),
+    // Bitcoin — smart sparse/normal mode via mempool.space
+    fetchBitcoin(prices, seen, storedBtcCount),
   ]);
 
   function collectSettled(r: PromiseSettledResult<PromiseSettledResult<object[]>[]>) {

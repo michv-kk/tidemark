@@ -12,9 +12,9 @@ async function checkEtherscan(): Promise<boolean> {
   } catch { return false; }
 }
 
-async function checkBlockchair(): Promise<boolean> {
+async function checkMempool(): Promise<boolean> {
   try {
-    const r = await fetch("https://api.blockchair.com/bitcoin/stats", { signal: AbortSignal.timeout(5000) });
+    const r = await fetch("https://mempool.space/api/blocks/tip/height", { signal: AbortSignal.timeout(5000) });
     return r.ok;
   } catch { return false; }
 }
@@ -35,7 +35,7 @@ async function checkCoinGecko(): Promise<boolean> {
 
 const SOURCES = [
   { key: "etherscan",   label: "EVM", fullName: "Etherscan V2 (ETH · ARB · MATIC)", url: "etherscan.io",          check: checkEtherscan },
-  { key: "blockchair",  label: "BTC", fullName: "Blockchair + Mempool.space (BTC)",  url: "blockchair.com",        check: checkBlockchair },
+  { key: "mempool",     label: "BTC", fullName: "Mempool.space (BTC)",              url: "mempool.space",         check: checkMempool },
   { key: "dexscreener", label: "DEX", fullName: "DexScreener",                       url: "dexscreener.com",       check: checkDexScreener },
   { key: "coingecko",   label: "CG",  fullName: "CoinGecko",                         url: "coingecko.com",         check: checkCoinGecko },
 ] as const;
@@ -132,7 +132,7 @@ export function ApiStatusBar() {
           </div>
 
           <div className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] text-gray-600">
-            Transactions: Etherscan V2 (ETH·ARB·MATIC) + Blockchair/Mempool (BTC) + BSC/AVAX RPC<br />
+            Transactions: Etherscan V2 (ETH·ARB·MATIC) + Mempool.space (BTC) + BSC/AVAX RPC<br />
             Prices &amp; charts: CoinGecko free tier
           </div>
         </div>
