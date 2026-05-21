@@ -12,10 +12,10 @@ const redis = (
 );
 const REDIS_KEY         = 'tidemark_whale_txs_v1';
 const REDIS_BLOCKCHAIR  = 'tidemark_blockchair_ts'; // rate-limit key for Blockchair
-const REDIS_MAX         = 2000;   // increased: prevents historical BTC being cut off by newer ETH txs
-const REDIS_TTL         = 48 * 3_600;
-const CUTOFF_MS         = 48 * 3_600_000;
-const MIN_USD           = 50_000;
+const REDIS_MAX         = 50_000;  // safety cap only — 24h rolling window is the real limit
+const REDIS_TTL         = 25 * 3_600;  // 25h — slightly longer than cutoff so Redis never expires early
+const CUTOFF_MS         = 24 * 3_600_000; // 24h rolling window — auto-prunes old transactions
+const MIN_USD           = 100_000; // $100K minimum — show all whale transactions
 const BTC_WHALE_USD     = 1_000_000; // $1M+ threshold for Blockchair — covers 24h+ of mega-whale data
 
 // ─── Prices ───────────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ interface RpcChainCfg {
 const RPC_CHAINS: RpcChainCfg[] = [
   {
     label: 'BSC', idPrefix: 'bsc', rpcUrl: 'https://bsc-rpc.publicnode.com',
-    blockTime: 3, lookbackBlocks: 1200,
+    blockTime: 3, lookbackBlocks: 7200, // 7200 × 3s = 6h lookback
     tokens: [
       { address: '0x55d398326f99059fF775485246999027B3197955', symbol: 'USDT', decimals: 18 },
       { address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', symbol: 'USDC', decimals: 18 },
@@ -329,9 +329,10 @@ export async function GET() {
       const combined = [...(v1Data ?? []), ...(v2Data ?? [])];
       const byId = new Map<string, TxRecord>();
       for (const t of combined) byId.set(t.id, t);
+      const cutoffLoad = Date.now() - CUTOFF_MS;
       stored = Array.from(byId.values())
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .slice(0, REDIS_MAX);
+        .filter(t => t.timestamp > cutoffLoad)
+        .sort((a, b) => b.timestamp - a.timestamp);
       if (v2Data && v2Data.length > 0) {
         await redis.del('tidemark_whale_txs_v2').catch(() => {});
       }
@@ -365,12 +366,15 @@ export async function GET() {
   collectSettled(rpcResults as PromiseSettledResult<PromiseSettledResult<object[]>[]>);
   if (btcResult.status === 'fulfilled') freshTxs.push(...btcResult.value);
 
-  // 3. Merge, deduplicate, cap at 48h / REDIS_MAX
+  // 3. Merge, deduplicate — 24h rolling window is the only real limit
+  // REDIS_MAX (50K) is a safety valve that should never be reached in normal operation.
   const cutoff = Date.now() - CUTOFF_MS;
-  const merged = ([...freshTxs, ...stored] as TxRecord[])
+  const byId = new Map<string, TxRecord>();
+  for (const t of ([...freshTxs, ...stored] as TxRecord[])) byId.set(t.id, t);
+  const merged = Array.from(byId.values())
     .filter(t => t.timestamp > cutoff)
     .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, REDIS_MAX);
+    .slice(0, REDIS_MAX); // safety only
 
   // 4. Persist to Redis
   if (redis && freshTxs.length > 0) {
