@@ -61,10 +61,11 @@ const ETHERSCAN_CHAINS: ChainCfg[] = [
 interface RawTx { hash: string; from: string; to: string; value: string; timeStamp: string; blockNumber: string; }
 
 async function fetchEtherscanChain(chain: ChainCfg, token: TokenCfg, prices: Prices, oneDayAgo: number, seen: Set<string>) {
+  // offset=1000 gives ~10x more transfers — covers most of the 24-hour whale window
   const url =
     `${ETHERSCAN_V2}?chainid=${chain.chainId}&module=account&action=tokentx` +
     `&contractaddress=${token.contractAddress}` +
-    `&page=1&offset=100&sort=desc&apikey=${API_KEY}`;
+    `&page=1&offset=1000&sort=desc&apikey=${API_KEY}`;
 
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) return [];
@@ -141,18 +142,19 @@ async function fetchBlockscout(chain: BlockscoutCfg, token: { address: string; s
     const d1: BlockscoutResp = await r1.json();
     items = d1.items ?? [];
 
-    // Fetch page 2 via cursor if available
-    if (d1.next_page_params) {
+    // Fetch pages 2 & 3 via cursor for wider historical coverage
+    let nextParams = d1.next_page_params;
+    for (let page = 2; page <= 4 && nextParams; page++) {
       const cursor = new URLSearchParams(
-        Object.entries(d1.next_page_params).map(([k, v]) => [k, String(v)])
+        Object.entries(nextParams).map(([k, v]) => [k, String(v)])
       );
       try {
-        const r2 = await fetch(`${base}?${cursor}`, { redirect: 'follow', cache: 'no-store', signal: AbortSignal.timeout(8_000) });
-        if (r2.ok) {
-          const d2: BlockscoutResp = await r2.json();
-          items = [...items, ...(d2.items ?? [])];
-        }
-      } catch { /* page 2 optional */ }
+        const rN = await fetch(`${base}?${cursor}`, { redirect: 'follow', cache: 'no-store', signal: AbortSignal.timeout(8_000) });
+        if (!rN.ok) break;
+        const dN: BlockscoutResp = await rN.json();
+        items = [...items, ...(dN.items ?? [])];
+        nextParams = dN.next_page_params ?? null;
+      } catch { break; }
     }
   } catch { return []; }
 
@@ -194,7 +196,7 @@ const RPC_CHAINS: RpcChainCfg[] = [
     label: 'BSC', idPrefix: 'bsc',
     rpcUrl: 'https://bsc-rpc.publicnode.com',
     blockTime: 3,
-    lookbackBlocks: 300, // ~15 min — keeps log count manageable
+    lookbackBlocks: 1200, // ~1 hour (BSC has high tx volume so capped to avoid huge response)
     tokens: [
       { address: '0x55d398326f99059fF775485246999027B3197955', symbol: 'USDT', decimals: 18 },
       { address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', symbol: 'USDC', decimals: 18 },
@@ -204,9 +206,9 @@ const RPC_CHAINS: RpcChainCfg[] = [
     label: 'AVAX', idPrefix: 'avax',
     rpcUrl: 'https://avalanche-c-chain-rpc.publicnode.com',
     blockTime: 2,
-    lookbackBlocks: 600, // ~20 min
+    lookbackBlocks: 10800, // ~6 hours (AVAX has low log volume so large window is fine)
     tokens: [
-      { address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6e', symbol: 'USDC', decimals: 6 },  // correct 40-char address
+      { address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6e', symbol: 'USDC', decimals: 6 },
       { address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', symbol: 'USDT', decimals: 6 },
     ],
   },

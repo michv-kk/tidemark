@@ -2,26 +2,28 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, Search, Settings, X, Wallet, TrendingUp, LayoutDashboard, BarChart2, Sparkles, BarChart3, BookOpen } from 'lucide-react';
+import {
+  Bell, Search, Settings, X, Wallet, TrendingUp, LayoutDashboard,
+  BarChart2, Sparkles, BarChart3, BookOpen, Menu,
+} from 'lucide-react';
 import { useAlerts } from '@/contexts/AlertsContext';
 import { formatTimeAgo } from '@/lib/formatters';
 import { ApiStatusBar } from '@/components/ApiStatusBar';
 
 const NAV_LINKS = [
-  { href: '/', label: 'Dashboard', icon: <LayoutDashboard size={14} /> },
-  { href: '/markets', label: 'Markets', icon: <TrendingUp size={14} /> },
-  { href: '/prices', label: 'Prices', icon: <BarChart2 size={14} /> },
-  { href: '/wallets', label: 'Wallets', icon: <Wallet size={14} /> },
-  { href: '/ai', label: 'AI Insights', icon: <Sparkles size={14} /> },
-  { href: '/analytics', label: 'Analytics', icon: <BarChart3 size={14} /> },
-  { href: '/derivatives', label: 'Derivatives', icon: <TrendingUp size={14} /> },
-  { href: '/about', label: 'About', icon: <BookOpen size={14} /> },
+  { href: '/',            label: 'Dashboard',   icon: <LayoutDashboard size={18} /> },
+  { href: '/markets',     label: 'Markets',     icon: <TrendingUp size={18} /> },
+  { href: '/prices',      label: 'Prices',      icon: <BarChart2 size={18} /> },
+  { href: '/wallets',     label: 'Wallets',     icon: <Wallet size={18} /> },
+  { href: '/ai',          label: 'AI Insights', icon: <Sparkles size={18} /> },
+  { href: '/analytics',   label: 'Analytics',   icon: <BarChart3 size={18} /> },
+  { href: '/derivatives', label: 'Derivatives', icon: <TrendingUp size={18} /> },
+  { href: '/about',       label: 'About',       icon: <BookOpen size={18} /> },
 ];
 
 async function searchCoins(q: string) {
   if (!q || q.length < 2) return [];
   try {
-    // Use proxy to avoid CORS blocks
     const res = await fetch(`/api/coingecko?path=%2Fsearch&query=${encodeURIComponent(q)}`);
     const data = await res.json();
     return (data.coins ?? []).slice(0, 5).map((c: { id: string; symbol: string; name: string; market_cap_rank: number }) => ({
@@ -35,15 +37,27 @@ function isAddress(s: string): boolean {
 }
 
 export default function Navbar() {
-  const pathname = usePathname();
-  const router = useRouter();
+  const pathname  = usePathname();
+  const router    = useRouter();
   const { unreadCount, alerts, markAllRead, selectTx } = useAlerts();
+
+  const [menuOpen,   setMenuOpen]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<{ id: string; symbol: string; name: string; rank: number }[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const [query,   setQuery]   = useState('');
+  const [results, setResults] = useState<{ id: string; symbol: string; name: string; rank: number }[]>([]);
+
+  const searchRef  = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Close mobile menu on route change
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
+
+  // Prevent body scroll when menu is open
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [menuOpen]);
 
   // CMD+K shortcut
   useEffect(() => {
@@ -52,9 +66,10 @@ export default function Navbar() {
         e.preventDefault();
         setSearchOpen(true);
         setAlertsOpen(false);
+        setMenuOpen(false);
         setTimeout(() => searchRef.current?.focus(), 50);
       }
-      if (e.key === 'Escape') { setSearchOpen(false); setAlertsOpen(false); }
+      if (e.key === 'Escape') { setSearchOpen(false); setAlertsOpen(false); setMenuOpen(false); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -63,13 +78,9 @@ export default function Navbar() {
   const handleSearch = useCallback((value: string) => {
     setQuery(value);
     clearTimeout(debounceRef.current);
-    if (isAddress(value)) {
-      setResults([]);
-      return;
-    }
+    if (isAddress(value)) { setResults([]); return; }
     debounceRef.current = setTimeout(async () => {
-      const res = await searchCoins(value);
-      setResults(res);
+      setResults(await searchCoins(value));
     }, 300);
   }, []);
 
@@ -84,118 +95,172 @@ export default function Navbar() {
   const openSearch = () => {
     setSearchOpen(true);
     setAlertsOpen(false);
+    setMenuOpen(false);
     setTimeout(() => searchRef.current?.focus(), 50);
   };
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-white/5 bg-[#080d18]/95 backdrop-blur-xl">
-      <div className="max-w-screen-2xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-7 h-7 rounded bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-            <span className="text-white text-xs font-black">T</span>
+    <>
+      <nav className="sticky top-0 z-40 border-b border-white/5 bg-[#080d18]/95 backdrop-blur-xl">
+        <div className="max-w-screen-2xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-7 h-7 rounded bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+              <span className="text-white text-xs font-black">T</span>
+            </div>
+            <span className="text-white font-bold tracking-wider text-lg">TIDEMARK</span>
+            <span className="hidden sm:inline text-xs text-cyan-400/60 uppercase tracking-widest border border-cyan-500/20 px-1.5 py-0.5 rounded">PRO</span>
+          </Link>
+
+          {/* Desktop Nav Links */}
+          <div className="hidden md:flex items-center gap-1 flex-1 justify-center">
+            {NAV_LINKS.map(link => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                  pathname === link.href
+                    ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {React.cloneElement(link.icon, { size: 14 })}
+                {link.label}
+              </Link>
+            ))}
           </div>
-          <span className="text-white font-bold tracking-wider text-lg">TIDEMARK</span>
-          <span className="hidden sm:inline text-xs text-cyan-400/60 uppercase tracking-widest border border-cyan-500/20 px-1.5 py-0.5 rounded">PRO</span>
-        </Link>
 
-        {/* Nav Links */}
-        <div className="hidden md:flex items-center gap-1">
-          {NAV_LINKS.map(link => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                pathname === link.href
-                  ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              {link.icon}
-              {link.label}
-            </Link>
-          ))}
-        </div>
+          {/* Right actions */}
+          <div className="flex items-center gap-2">
+            {/* API status — desktop only */}
+            <div className="hidden sm:block">
+              <ApiStatusBar />
+            </div>
 
-        {/* Right actions */}
-        <div className="flex items-center gap-2">
-          {/* API status */}
-          <div className="hidden sm:block">
-            <ApiStatusBar />
-          </div>
-          {/* Search trigger */}
-          <button
-            onClick={openSearch}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors text-sm border border-white/5 hover:border-white/10"
-          >
-            <Search size={14} />
-            <span className="hidden sm:inline text-xs">Search</span>
-            <kbd className="hidden lg:inline text-xs bg-white/5 px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
-          </button>
-
-          {/* Alerts bell */}
-          <div className="relative">
+            {/* Search trigger */}
             <button
-              onClick={() => { setAlertsOpen(p => !p); setSearchOpen(false); markAllRead(); }}
-              className="relative p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+              onClick={openSearch}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors text-sm border border-white/5 hover:border-white/10"
             >
-              <Bell size={16} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
+              <Search size={14} />
+              <span className="hidden sm:inline text-xs">Search</span>
+              <kbd className="hidden lg:inline text-xs bg-white/5 px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
             </button>
 
-            {/* Alerts drawer */}
-            {alertsOpen && (
-              <div className="absolute right-0 top-10 w-80 max-h-96 overflow-y-auto bg-[#0d1421] border border-white/10 rounded-xl shadow-2xl z-50">
-                <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#0d1421]">
-                  <span className="text-white text-sm font-semibold">Alert History</span>
-                  <span className="text-gray-500 text-xs">{alerts.length} total</span>
-                </div>
-                {alerts.length === 0 ? (
-                  <div className="p-6 text-center text-gray-500 text-sm">No alerts yet</div>
-                ) : (
-                  <div className="divide-y divide-white/5">
-                    {alerts.slice(0, 50).map(a => (
-                      <div
-                        key={a.id}
-                        className={`px-4 py-3 transition-colors ${a.read ? '' : 'bg-white/[0.03]'} ${a.transaction ? 'cursor-pointer hover:bg-white/[0.07]' : ''}`}
-                        onClick={() => {
-                          if (a.transaction) {
-                            selectTx(a.transaction);
-                            setAlertsOpen(false);
-                          }
-                        }}
-                      >
-                        <div className="text-white text-xs font-medium">{a.message}</div>
-                        <div className="text-gray-500 text-xs mt-0.5">{a.detail}</div>
-                        <div className="flex items-center justify-between mt-0.5">
-                          <div className="text-gray-600 text-xs">{formatTimeAgo(a.timestamp)}</div>
-                          {a.transaction && (
-                            <span className="text-[10px] text-cyan-500/60">tap to view →</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+            {/* Alerts bell */}
+            <div className="relative">
+              <button
+                onClick={() => { setAlertsOpen(p => !p); setSearchOpen(false); setMenuOpen(false); markAllRead(); }}
+                className="relative p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                <Bell size={16} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
                 )}
-              </div>
-            )}
-          </div>
+              </button>
 
-          {/* Settings */}
-          <Link href="/settings" className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors">
-            <Settings size={16} />
-          </Link>
+              {/* Alerts drawer */}
+              {alertsOpen && (
+                <div className="absolute right-0 top-10 w-80 max-h-96 overflow-y-auto bg-[#0d1421] border border-white/10 rounded-xl shadow-2xl z-50">
+                  <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#0d1421]">
+                    <span className="text-white text-sm font-semibold">Alert History</span>
+                    <span className="text-gray-500 text-xs">{alerts.length} total</span>
+                  </div>
+                  {alerts.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500 text-sm">No alerts yet</div>
+                  ) : (
+                    <div className="divide-y divide-white/5">
+                      {alerts.slice(0, 50).map(a => (
+                        <div
+                          key={a.id}
+                          className={`px-4 py-3 transition-colors ${a.read ? '' : 'bg-white/[0.03]'} ${a.transaction ? 'cursor-pointer hover:bg-white/[0.07]' : ''}`}
+                          onClick={() => { if (a.transaction) { selectTx(a.transaction); setAlertsOpen(false); } }}
+                        >
+                          <div className="text-white text-xs font-medium">{a.message}</div>
+                          <div className="text-gray-500 text-xs mt-0.5">{a.detail}</div>
+                          <div className="flex items-center justify-between mt-0.5">
+                            <div className="text-gray-600 text-xs">{formatTimeAgo(a.timestamp)}</div>
+                            {a.transaction && <span className="text-[10px] text-cyan-500/60">tap to view →</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Settings — desktop */}
+            <Link href="/settings" className="hidden md:block p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors">
+              <Settings size={16} />
+            </Link>
+
+            {/* Hamburger — mobile only */}
+            <button
+              className="md:hidden p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+              onClick={() => { setMenuOpen(p => !p); setAlertsOpen(false); setSearchOpen(false); }}
+              aria-label="Open menu"
+            >
+              {menuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
         </div>
-      </div>
+
+        {/* ── Mobile collapsible menu ── */}
+        {menuOpen && (
+          <div className="md:hidden border-t border-white/5 bg-[#080d18]">
+            {/* API status on mobile */}
+            <div className="px-4 py-2 border-b border-white/5">
+              <ApiStatusBar />
+            </div>
+
+            {/* Nav links grid */}
+            <div className="grid grid-cols-2 gap-1 p-3">
+              {NAV_LINKS.map(link => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                    pathname === link.href
+                      ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20'
+                      : 'text-gray-400 hover:text-white bg-white/[0.03] hover:bg-white/[0.07]'
+                  }`}
+                >
+                  {link.icon}
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+
+            {/* Settings row */}
+            <div className="px-3 pb-3">
+              <Link
+                href="/settings"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-400 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] transition-colors w-full"
+              >
+                <Settings size={18} />
+                Settings
+              </Link>
+            </div>
+          </div>
+        )}
+      </nav>
 
       {/* Search overlay */}
       {searchOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-24 px-4" onClick={() => setSearchOpen(false)}>
-          <div className="w-full max-w-lg bg-[#0d1421] border border-white/10 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-24 px-4"
+          onClick={() => setSearchOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-[#0d1421] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5">
               <Search size={16} className="text-gray-400 flex-shrink-0" />
               <input
@@ -211,10 +276,7 @@ export default function Navbar() {
               </button>
             </div>
             {isAddress(query) && (
-              <div
-                className="px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer"
-                onClick={handleSearchSubmit}
-              >
+              <div className="px-4 py-3 flex items-center gap-3 hover:bg-white/5 cursor-pointer" onClick={handleSearchSubmit}>
                 <Wallet size={14} className="text-cyan-400" />
                 <div>
                   <div className="text-white text-sm font-mono">{query.slice(0, 12)}...{query.slice(-6)}</div>
@@ -250,6 +312,6 @@ export default function Navbar() {
           </div>
         </div>
       )}
-    </nav>
+    </>
   );
 }
