@@ -3,7 +3,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Transaction, ChainId } from '@/lib/types';
 import { fetchEtherscanTransactions } from '@/lib/api/etherscan';
 import { fetchMempoolTransactions } from '@/lib/api/mempool';
-import { fetchSolanaTransactions } from '@/lib/api/solana';
+
+// Solana is now fetched server-side inside /api/whale-txs and included
+// in the same Redis-backed response — no separate client-side Solana call needed.
 
 export type SourceKey = 'etherscan' | 'mempool' | 'solana';
 export type SourceStatus = 'loading' | 'ok' | 'error';
@@ -32,7 +34,6 @@ export interface UseRealTransactionsResult {
 
 const ETHERSCAN_INTERVAL = 30_000;
 const MEMPOOL_INTERVAL   = 20_000;
-const SOLANA_INTERVAL    = 30_000;
 const MAX_TXS            = 1000;
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
@@ -91,7 +92,7 @@ export function useRealTransactions(): UseRealTransactionsResult {
     setTransactions(prev => mergeTxs(prev, incoming));
   }, []);
 
-  // ── Fetch functions (loading status only on first call) ───────────────────
+  // ── Fetch functions ───────────────────────────────────────────────────────
 
   const fetchEtherscan = useCallback(async (initial = false) => {
     if (initial) setStatus('etherscan', 'loading');
@@ -99,6 +100,11 @@ export function useRealTransactions(): UseRealTransactionsResult {
       const txs = await fetchEtherscanTransactions();
       if (txs.length > 0) {
         sourceSuccess.current.etherscan = true;
+        // Solana txs are bundled inside the whale-txs response — mark solana ok too
+        if (txs.some(t => t.chain === 'SOL')) {
+          sourceSuccess.current.solana = true;
+          setStatus('solana', 'ok');
+        }
         addTxs(txs);
       }
       setStatus('etherscan', 'ok');
@@ -121,24 +127,9 @@ export function useRealTransactions(): UseRealTransactionsResult {
     }
   }, [setStatus, addTxs]);
 
-  const fetchSolana = useCallback(async (initial = false) => {
-    if (initial) setStatus('solana', 'loading');
-    try {
-      const txs = await fetchSolanaTransactions();
-      if (txs.length > 0) {
-        sourceSuccess.current.solana = true;
-        addTxs(txs);
-      }
-      setStatus('solana', 'ok');
-    } catch {
-      setStatus('solana', 'error');
-    }
-  }, [setStatus, addTxs]);
-
   // ── Initial load ──────────────────────────────────────────────────────────
 
   useEffect(() => {
-    // Clear any stale localStorage cache from before Redis was introduced
     try { localStorage.removeItem('tidemark_whale_txs'); } catch {}
   }, []);
 
@@ -150,9 +141,12 @@ export function useRealTransactions(): UseRealTransactionsResult {
     Promise.allSettled([
       fetchEtherscan(true),
       fetchMempool(true),
-      fetchSolana(true),
     ]).then(() => {
-      if (isMounted.current) setIsLoading(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+        // Solana is bundled in whale-txs; mark ok if not already set
+        setStatus('solana', 'ok');
+      }
     });
 
     return () => { isMounted.current = false; };
@@ -171,16 +165,10 @@ export function useRealTransactions(): UseRealTransactionsResult {
     return () => clearInterval(id);
   }, [fetchMempool]);
 
-  useEffect(() => {
-    const id = setInterval(() => fetchSolana(false), SOLANA_INTERVAL);
-    return () => clearInterval(id);
-  }, [fetchSolana]);
-
   const isUsingFallback =
     !isLoading &&
     !sourceSuccess.current.etherscan &&
-    !sourceSuccess.current.mempool &&
-    !sourceSuccess.current.solana;
+    !sourceSuccess.current.mempool;
 
   return {
     transactions,
