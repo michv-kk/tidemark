@@ -34,32 +34,6 @@ const ETHERSCAN_INTERVAL = 30_000;
 const MEMPOOL_INTERVAL   = 20_000;
 const SOLANA_INTERVAL    = 30_000;
 const MAX_TXS            = 1000;
-const STORAGE_KEY        = 'tidemark_whale_txs';
-const STORAGE_MAX        = 500; // save fewer to localStorage (browser limit)
-
-// ── localStorage helpers (SSR-safe) ──────────────────────────────────────────
-
-function loadFromStorage(): Transaction[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: Transaction[] = JSON.parse(raw);
-    // Only keep transactions from the last 48 hours (avoid stale data)
-    const cutoff = Date.now() - 48 * 3_600_000;
-    return parsed.filter(t => t.timestamp > cutoff);
-  } catch {
-    return [];
-  }
-}
-
-function saveToStorage(txs: Transaction[]) {
-  try {
-    // Save the newest STORAGE_MAX transactions
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(txs.slice(0, STORAGE_MAX)));
-  } catch {
-    // localStorage full — ignore
-  }
-}
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
@@ -103,15 +77,6 @@ export function useRealTransactions(): UseRealTransactionsResult {
   const initialDone   = useRef(false);
   const seenIds       = useRef(new Set<string>());
 
-  // Load persisted transactions on first mount (before any API call)
-  useEffect(() => {
-    const saved = loadFromStorage();
-    if (saved.length > 0) {
-      saved.forEach(t => seenIds.current.add(t.id));
-      setTransactions(saved);
-    }
-  }, []);
-
   const setStatus = useCallback((key: SourceKey, status: SourceStatus) => {
     if (!isMounted.current) return;
     setApiStatus(prev => ({ ...prev, [key]: status }));
@@ -122,11 +87,7 @@ export function useRealTransactions(): UseRealTransactionsResult {
     const brandNew = incoming.filter(t => !seenIds.current.has(t.id));
     brandNew.forEach(t => seenIds.current.add(t.id));
     if (brandNew.length > 0) setNewTransactions(brandNew);
-    setTransactions(prev => {
-      const merged = mergeTxs(prev, incoming);
-      saveToStorage(merged); // persist after every update
-      return merged;
-    });
+    setTransactions(prev => mergeTxs(prev, incoming));
   }, []);
 
   // ── Fetch functions (loading status only on first call) ───────────────────
@@ -174,6 +135,11 @@ export function useRealTransactions(): UseRealTransactionsResult {
   }, [setStatus, addTxs]);
 
   // ── Initial load ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    // Clear any stale localStorage cache from before Redis was introduced
+    try { localStorage.removeItem('tidemark_whale_txs'); } catch {}
+  }, []);
 
   useEffect(() => {
     isMounted.current = true;
