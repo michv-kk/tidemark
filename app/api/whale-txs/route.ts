@@ -1,8 +1,25 @@
 import { NextResponse } from 'next/server';
+import { Redis } from '@upstash/redis';
 
 // ISR: Vercel caches the full route response for 30 s across ALL users.
 export const revalidate = 30;
 export const maxDuration = 25;
+
+// ─── Redis accumulator (shared across all clients / browsers) ─────────────────
+// Gracefully disabled when env vars are not set (local dev without Redis).
+const redis = (
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    ? new Redis({
+        url:   process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+    : null
+);
+
+const REDIS_KEY  = 'tidemark_whale_txs_v1';
+const REDIS_MAX  = 500;           // max txs stored server-side
+const REDIS_TTL  = 48 * 3_600;   // 48 h expiry (seconds)
+const CUTOFF_MS  = 48 * 3_600_000; // only keep last 48 h
 
 const MIN_USD = 50_000; // $50K minimum — enough to catch whales across all chains
 
@@ -298,12 +315,22 @@ export async function GET() {
   const [pricesResult] = await Promise.allSettled([getPrices()]);
   const prices: Prices = pricesResult.status === 'fulfilled' ? pricesResult.value : { btc: 77000, eth: 2500 };
   const oneDayAgo = Math.floor(Date.now() / 1000) - 86_400;
-  const seen = new Set<string>();
-  const all: object[] = [];
 
-  // Run all three strategies in parallel
+  // ── 1. Load accumulated history from Redis (server-side, shared across all clients) ──
+  type TxRecord = { id: string; timestamp: number; [k: string]: unknown };
+  let stored: TxRecord[] = [];
+  if (redis) {
+    try {
+      stored = (await redis.get<TxRecord[]>(REDIS_KEY)) ?? [];
+    } catch { /* Redis unavailable — continue without it */ }
+  }
+
+  // Pre-populate the seen set with already-stored ids (prevents duplicates)
+  const seen = new Set<string>(stored.map(t => t.id));
+  const freshTxs: object[] = [];
+
+  // ── 2. Fetch new transactions from all chains in parallel ──────────────────
   const [etherscanResults, blockscoutResults, rpcResults] = await Promise.allSettled([
-    // Strategy 1: Etherscan V2 (ETH, ARB, MATIC)
     API_KEY
       ? Promise.allSettled(
           ETHERSCAN_CHAINS.flatMap(chain =>
@@ -312,43 +339,45 @@ export async function GET() {
         )
       : Promise.resolve([]),
 
-    // Strategy 2: Blockscout (BASE, OP)
     Promise.allSettled(
       BLOCKSCOUT_CHAINS.flatMap(chain =>
         chain.tokens.map(token => fetchBlockscout(chain, token, prices, seen))
       )
     ),
 
-    // Strategy 3: eth_getLogs via public RPC (BSC, AVAX)
     Promise.allSettled(
       RPC_CHAINS.map(chain => fetchRpcChain(chain, prices, seen))
     ),
   ]);
 
-  // Collect Etherscan results
-  if (etherscanResults.status === 'fulfilled') {
-    for (const r of etherscanResults.value) {
-      if (r.status === 'fulfilled') all.push(...(r.value as object[]));
-    }
+  if (etherscanResults.status === 'fulfilled')
+    for (const r of etherscanResults.value)
+      if (r.status === 'fulfilled') freshTxs.push(...(r.value as object[]));
+
+  if (blockscoutResults.status === 'fulfilled')
+    for (const r of blockscoutResults.value)
+      if (r.status === 'fulfilled') freshTxs.push(...(r.value as object[]));
+
+  if (rpcResults.status === 'fulfilled')
+    for (const r of rpcResults.value)
+      if (r.status === 'fulfilled') freshTxs.push(...(r.value as object[]));
+
+  // ── 3. Merge: fresh + stored, sort newest-first, filter to 48h, cap at REDIS_MAX ──
+  const cutoff = Date.now() - CUTOFF_MS;
+  const merged = ([...freshTxs, ...stored] as TxRecord[])
+    .filter(t => t.timestamp > cutoff)
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, REDIS_MAX);
+
+  // ── 4. Persist merged list back to Redis (48 h TTL) ───────────────────────
+  if (redis && freshTxs.length > 0) {
+    try {
+      await redis.set(REDIS_KEY, merged, { ex: REDIS_TTL });
+    } catch { /* ignore write errors */ }
   }
 
-  // Collect Blockscout results
-  if (blockscoutResults.status === 'fulfilled') {
-    for (const r of blockscoutResults.value) {
-      if (r.status === 'fulfilled') all.push(...(r.value as object[]));
-    }
-  }
-
-  // Collect RPC results
-  if (rpcResults.status === 'fulfilled') {
-    for (const r of rpcResults.value) {
-      if (r.status === 'fulfilled') all.push(...(r.value as object[]));
-    }
-  }
-
-  (all as { timestamp: number }[]).sort((a, b) => b.timestamp - a.timestamp);
-
-  return NextResponse.json(all, {
+  // ── 5. Return: client gets the full accumulated history ───────────────────
+  return NextResponse.json(merged, {
     headers: { 'Cache-Control': 'public, max-age=25' },
   });
 }
