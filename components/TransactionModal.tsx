@@ -41,24 +41,18 @@ const EXPLORER_URLS: Record<string, string> = {
   ETH:   'https://etherscan.io/tx/',
   BTC:   'https://mempool.space/tx/',
   BSC:   'https://bscscan.com/tx/',
-  SOL:   'https://solscan.io/tx/',
   ARB:   'https://arbiscan.io/tx/',
-  BASE:  'https://basescan.org/tx/',
   MATIC: 'https://polygonscan.com/tx/',
   AVAX:  'https://snowtrace.io/tx/',
-  OP:    'https://optimistic.etherscan.io/tx/',
 };
 
 const ADDR_EXPLORERS: Record<string, string> = {
   ETH:   'https://etherscan.io/address/',
   BTC:   'https://mempool.space/address/',
   BSC:   'https://bscscan.com/address/',
-  SOL:   'https://solscan.io/account/',
   ARB:   'https://arbiscan.io/address/',
-  BASE:  'https://basescan.org/address/',
   MATIC: 'https://polygonscan.com/address/',
   AVAX:  'https://snowtrace.io/address/',
-  OP:    'https://optimistic.etherscan.io/address/',
 };
 
 const EXCHANGES = ['Binance', 'Coinbase', 'Kraken', 'OKX', 'Bybit', 'Huobi', 'Bitfinex'];
@@ -268,9 +262,10 @@ export default function TransactionModal({ tx, onClose }: Props) {
             <ExternalLink size={11} />
             {tx.source === 'dexscreener' ? 'View on DexScreener'
               : tx.chain === 'BTC' ? 'View on Mempool.space'
-              : tx.chain === 'SOL' ? 'View on Solscan'
-              : tx.chain === 'BASE' ? 'View on Basescan'
               : tx.chain === 'ARB' ? 'View on Arbiscan'
+              : tx.chain === 'BSC' ? 'View on BscScan'
+              : tx.chain === 'MATIC' ? 'View on Polygonscan'
+              : tx.chain === 'AVAX' ? 'View on Snowtrace'
               : 'View on Etherscan'}
           </a>
         </div>

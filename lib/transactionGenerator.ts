@@ -2,41 +2,36 @@ import { Transaction, ChainId, TxType } from './types';
 import { KNOWN_WALLETS } from './knownWallets';
 
 const CHAINS: { id: ChainId; weight: number; nativeToken: string; blockTime: number }[] = [
-  { id: 'ETH', weight: 40, nativeToken: 'ETH', blockTime: 12 },
-  { id: 'BTC', weight: 18, nativeToken: 'BTC', blockTime: 600 },
-  { id: 'BSC', weight: 10, nativeToken: 'BNB', blockTime: 3 },
-  { id: 'SOL', weight: 12, nativeToken: 'SOL', blockTime: 1 },
-  { id: 'ARB', weight: 8, nativeToken: 'ETH', blockTime: 2 },
-  { id: 'MATIC', weight: 6, nativeToken: 'MATIC', blockTime: 2 },
-  { id: 'AVAX', weight: 4, nativeToken: 'AVAX', blockTime: 2 },
-  { id: 'OP', weight: 2, nativeToken: 'ETH', blockTime: 2 },
+  { id: 'ETH',   weight: 40, nativeToken: 'ETH',   blockTime: 12 },
+  { id: 'BTC',   weight: 20, nativeToken: 'BTC',   blockTime: 600 },
+  { id: 'BSC',   weight: 12, nativeToken: 'BNB',   blockTime: 3 },
+  { id: 'ARB',   weight: 10, nativeToken: 'ETH',   blockTime: 2 },
+  { id: 'MATIC', weight: 8,  nativeToken: 'MATIC', blockTime: 2 },
+  { id: 'AVAX',  weight: 10, nativeToken: 'AVAX',  blockTime: 2 },
 ];
 
 const TOKENS_BY_CHAIN: Record<ChainId, string[]> = {
-  ETH: ['ETH', 'USDT', 'USDC', 'WBTC', 'DAI', 'LINK', 'UNI', 'AAVE', 'MKR', 'CRV'],
-  BTC: ['BTC'],
-  BSC: ['BNB', 'BUSD', 'CAKE', 'USDT'],
-  SOL: ['SOL', 'USDC', 'RAY', 'BONK', 'JUP'],
-  ARB: ['ETH', 'ARB', 'USDC', 'USDT', 'GMX'],
+  ETH:   ['ETH', 'USDT', 'USDC', 'WBTC', 'DAI', 'LINK', 'UNI', 'AAVE', 'MKR', 'CRV'],
+  BTC:   ['BTC'],
+  BSC:   ['BNB', 'BUSD', 'CAKE', 'USDT'],
+  ARB:   ['ETH', 'ARB', 'USDC', 'USDT', 'GMX'],
   MATIC: ['MATIC', 'USDC', 'USDT', 'AAVE'],
-  AVAX: ['AVAX', 'USDC', 'JOE', 'USDT'],
-  OP: ['ETH', 'OP', 'USDC', 'USDT'],
-  BASE: ['ETH', 'USDC', 'DAI'],
+  AVAX:  ['AVAX', 'USDC', 'JOE', 'USDT'],
 };
 
 const TOKEN_PRICES: Record<string, number> = {
-  BTC: 67500, ETH: 3420, BNB: 580, SOL: 148, MATIC: 0.72,
-  AVAX: 34, ARB: 1.1, OP: 1.8, LINK: 14.5, UNI: 7.8,
-  AAVE: 88, MKR: 1580, CRV: 0.55, GMX: 32, RAY: 1.9,
-  JUP: 0.78, BONK: 0.000025, JOE: 0.42, CAKE: 2.8,
-  USDT: 1, USDC: 1, DAI: 1, BUSD: 1, WBTC: 67500,
+  BTC: 95000, ETH: 3200, BNB: 580, MATIC: 0.52,
+  AVAX: 34, ARB: 1.1, LINK: 14.5, UNI: 7.8,
+  AAVE: 88, MKR: 1580, CRV: 0.55, GMX: 32,
+  JOE: 0.42, CAKE: 2.8,
+  USDT: 1, USDC: 1, DAI: 1, BUSD: 1, WBTC: 95000,
 };
 
 const TX_TYPES: TxType[] = ['transfer', 'transfer', 'transfer', 'swap', 'swap', 'bridge', 'stake', 'unstake', 'liquidation'];
 
 const blockNumbers: Record<string, number> = {
-  ETH: 19_800_000, BTC: 840_000, BSC: 38_000_000, SOL: 280_000_000,
-  ARB: 200_000_000, MATIC: 55_000_000, AVAX: 45_000_000, OP: 120_000_000,
+  ETH: 22_000_000, BTC: 895_000, BSC: 42_000_000,
+  ARB: 220_000_000, MATIC: 58_000_000, AVAX: 48_000_000,
 };
 
 function rand(min: number, max: number): number {
@@ -69,12 +64,6 @@ function generateAddress(chain: ChainId): string {
     const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     let addr = prefix;
     for (let i = 0; i < 30; i++) addr += chars[Math.floor(Math.random() * chars.length)];
-    return addr;
-  }
-  if (chain === 'SOL') {
-    const chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    let addr = '';
-    for (let i = 0; i < 44; i++) addr += chars[Math.floor(Math.random() * chars.length)];
     return addr;
   }
   let addr = '0x';
@@ -169,7 +158,7 @@ export function calcMaxTransaction(txs: Transaction[]): Transaction | null {
   return txs.reduce((max, t) => (t.value > max.value ? t : max), txs[0]);
 }
 
-export function calcActiveChains(txs: Transaction[]): ChainId[] {
+export function calcActiveChains(txs: Transaction[]): string[] {
   const oneHourAgo = Date.now() - 3_600_000;
   const active = new Set(txs.filter(t => t.timestamp > oneHourAgo).map(t => t.chain));
   return Array.from(active);

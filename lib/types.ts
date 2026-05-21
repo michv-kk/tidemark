@@ -1,11 +1,11 @@
-export type ChainId = 'ETH' | 'BTC' | 'BSC' | 'SOL' | 'ARB' | 'MATIC' | 'AVAX' | 'OP' | 'BASE';
+export type ChainId = 'ETH' | 'BTC' | 'BSC' | 'ARB' | 'MATIC' | 'AVAX';
 export type TxType = 'transfer' | 'swap' | 'bridge' | 'stake' | 'unstake' | 'liquidation' | 'mint' | 'burn';
 export type WalletType = 'exchange' | 'fund' | 'whale' | 'defi' | 'bridge' | 'unknown' | 'protocol';
 
 export interface Transaction {
   id: string;
   hash: string;
-  chain: ChainId;
+  chain: string; // keep as string so old Redis records with any chain don't break
   from: string;
   to: string;
   value: number;
@@ -17,7 +17,7 @@ export interface Transaction {
   gasPrice?: number;
   type: TxType;
   isWhale: boolean;
-  source?: 'etherscan' | 'mempool' | 'solana' | 'dexscreener' | 'generated';
+  source?: 'etherscan' | 'mempool' | 'blockchair' | 'rpc' | 'dexscreener' | 'generated';
   aiInsight?: string;
 }
 

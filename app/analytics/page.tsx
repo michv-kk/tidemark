@@ -342,36 +342,43 @@ function ChainActivityPanel() {
       label: 'Ethereum (ETH)',
       source: 'Etherscan V2 API · chainid=1',
       color: 'bg-blue-500',
-      desc: 'ERC-20 token transfers (USDC, USDT, WBTC) from Binance, Circle & Tether whale wallets',
-      interval: '15s',
-    },
-    {
-      label: 'Base (BASE)',
-      source: 'Etherscan V2 API · chainid=8453',
-      color: 'bg-indigo-500',
-      desc: 'USDC & WETH transfers from Coinbase institutional wallets and major Base whales',
-      interval: '15s',
+      desc: 'ERC-20 token transfers (USDC, USDT, WBTC, WETH) — biggest whale chain by volume',
+      interval: '30s',
     },
     {
       label: 'Arbitrum (ARB)',
       source: 'Etherscan V2 API · chainid=42161',
       color: 'bg-cyan-500',
-      desc: 'USDC, USDT & WBTC flows from Binance, Wintermute and Jump Crypto on Arbitrum',
-      interval: '15s',
+      desc: 'USDC, USDT & WETH flows on Arbitrum L2',
+      interval: '30s',
+    },
+    {
+      label: 'Polygon (MATIC)',
+      source: 'Etherscan V2 API · chainid=137',
+      color: 'bg-violet-500',
+      desc: 'USDC & USDT transfers on Polygon PoS',
+      interval: '30s',
     },
     {
       label: 'Bitcoin (BTC)',
-      source: 'Mempool.space API',
+      source: 'Blockchair API + Mempool.space',
       color: 'bg-orange-500',
-      desc: 'Large UTXO movements from the last 3 confirmed blocks (≥ 0.5 BTC)',
-      interval: '20s',
+      desc: 'Large BTC movements — 48h history via Blockchair, recent blocks via Mempool.space',
+      interval: '30s',
     },
     {
-      label: 'Solana (SOL)',
-      source: 'Solana mainnet public RPC',
-      color: 'bg-purple-500',
-      desc: 'USDC, USDT & native SOL transfers from Binance, Kraken and Jump Crypto whale wallets',
-      interval: '25s',
+      label: 'BNB Smart Chain (BSC)',
+      source: 'Public RPC · eth_getLogs',
+      color: 'bg-yellow-500',
+      desc: 'USDT & USDC transfers on BSC via public node',
+      interval: '30s',
+    },
+    {
+      label: 'Avalanche (AVAX)',
+      source: 'Public RPC · eth_getLogs',
+      color: 'bg-red-500',
+      desc: 'USDC & USDT transfers on Avalanche C-Chain',
+      interval: '30s',
     },
   ];
 
@@ -395,7 +402,7 @@ function ChainActivityPanel() {
         ))}
       </div>
       <div className="mt-4 pt-3 border-t border-white/5 text-xs text-gray-600">
-        5 chains · No API key needed for Solana · Same Etherscan key covers ETH, BASE &amp; ARB
+        6 chains · ETH, ARB, MATIC via Etherscan · BTC via Blockchair · BSC &amp; AVAX via public RPC
       </div>
     </Card>
   );

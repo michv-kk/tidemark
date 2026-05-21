@@ -28,8 +28,6 @@ function mapChainId(dexChain: string): ChainId | null {
     arbitrum: 'ARB',
     polygon: 'MATIC',
     avalanche: 'AVAX',
-    optimism: 'OP',
-    base: 'BASE',
   };
   return map[dexChain.toLowerCase()] ?? null;
 }

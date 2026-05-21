@@ -238,7 +238,7 @@ async function fetchForAddress(
       blockNumber: tx.slot ?? 0,
       type:        'transfer',
       isWhale:     best.usdValue >= 500_000,
-      source:      'solana',
+      source:      'rpc',
     });
   }
 

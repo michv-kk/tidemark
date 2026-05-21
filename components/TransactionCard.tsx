@@ -10,12 +10,9 @@ const CHAIN_COLORS: Record<string, string> = {
   ETH:   'bg-blue-500/20 text-blue-300 border-blue-500/30',
   BTC:   'bg-orange-500/20 text-orange-300 border-orange-500/30',
   BSC:   'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-  SOL:   'bg-purple-500/20 text-purple-300 border-purple-500/30',
   ARB:   'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-  BASE:  'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
   MATIC: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
   AVAX:  'bg-red-500/20 text-red-300 border-red-500/30',
-  OP:    'bg-rose-500/20 text-rose-300 border-rose-500/30',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -46,12 +43,9 @@ function TransactionCard({ tx, onClick }: Props) {
     ETH:   'https://etherscan.io/tx/',
     BTC:   'https://mempool.space/tx/',
     BSC:   'https://bscscan.com/tx/',
-    SOL:   'https://solscan.io/tx/',
     ARB:   'https://arbiscan.io/tx/',
-    BASE:  'https://basescan.org/tx/',
     MATIC: 'https://polygonscan.com/tx/',
     AVAX:  'https://snowtrace.io/tx/',
-    OP:    'https://optimistic.etherscan.io/tx/',
   };
   const etherscanBase = EXPLORER_TX[tx.chain] ?? 'https://etherscan.io/tx/';
 

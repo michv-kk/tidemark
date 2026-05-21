@@ -15,16 +15,13 @@ interface AiResult {
   error?: string;
 }
 
-const CHAIN_COLORS: Record<ChainId, string> = {
+const CHAIN_COLORS: Record<string, string> = {
   ETH: '#627EEA',
   BTC: '#F7931A',
   BSC: '#F0B90B',
-  SOL: '#9945FF',
   ARB: '#28A0F0',
   MATIC: '#8247E5',
   AVAX: '#E84142',
-  OP: '#FF0420',
-  BASE: '#0052FF',
 };
 
 function ChainPie({ transactions }: { transactions: Transaction[] }) {

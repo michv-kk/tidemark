@@ -12,22 +12,9 @@ async function checkEtherscan(): Promise<boolean> {
   } catch { return false; }
 }
 
-async function checkSolana(): Promise<boolean> {
+async function checkBlockchair(): Promise<boolean> {
   try {
-    const r = await fetch("/api/solana", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth" }),
-      signal: AbortSignal.timeout(5000),
-    });
-    const d = await r.json();
-    return d.result === "ok";
-  } catch { return false; }
-}
-
-async function checkMempool(): Promise<boolean> {
-  try {
-    const r = await fetch("https://mempool.space/api/blocks/tip/height", { signal: AbortSignal.timeout(5000) });
+    const r = await fetch("https://api.blockchair.com/bitcoin/stats", { signal: AbortSignal.timeout(5000) });
     return r.ok;
   } catch { return false; }
 }
@@ -41,18 +28,16 @@ async function checkDexScreener(): Promise<boolean> {
 
 async function checkCoinGecko(): Promise<boolean> {
   try {
-    // Use proxy to avoid CORS blocks
     const r = await fetch("/api/coingecko?path=%2Fping", { signal: AbortSignal.timeout(5000) });
     return r.ok;
   } catch { return false; }
 }
 
 const SOURCES = [
-  { key: "etherscan",   label: "EVM", fullName: "Etherscan V2 (ETH · BASE · ARB)", url: "etherscan.io",              check: checkEtherscan },
-  { key: "mempool",     label: "BTC", fullName: "Mempool.space",                   url: "mempool.space",             check: checkMempool },
-  { key: "solana",      label: "SOL", fullName: "Solana public RPC",               url: "api.mainnet-beta.solana.com", check: checkSolana },
-  { key: "dexscreener", label: "DEX", fullName: "DexScreener",                     url: "dexscreener.com",           check: checkDexScreener },
-  { key: "coingecko",   label: "CG",  fullName: "CoinGecko",                       url: "coingecko.com",             check: checkCoinGecko },
+  { key: "etherscan",   label: "EVM", fullName: "Etherscan V2 (ETH · ARB · MATIC)", url: "etherscan.io",          check: checkEtherscan },
+  { key: "blockchair",  label: "BTC", fullName: "Blockchair + Mempool.space (BTC)",  url: "blockchair.com",        check: checkBlockchair },
+  { key: "dexscreener", label: "DEX", fullName: "DexScreener",                       url: "dexscreener.com",       check: checkDexScreener },
+  { key: "coingecko",   label: "CG",  fullName: "CoinGecko",                         url: "coingecko.com",         check: checkCoinGecko },
 ] as const;
 
 export function ApiStatusBar() {
@@ -147,7 +132,7 @@ export function ApiStatusBar() {
           </div>
 
           <div className="mt-3 border-t border-white/[0.06] pt-3 text-[10px] text-gray-600">
-            Transactions: Etherscan V2 (ETH·BASE·ARB) + Mempool.space (BTC) + Solana RPC<br />
+            Transactions: Etherscan V2 (ETH·ARB·MATIC) + Blockchair/Mempool (BTC) + BSC/AVAX RPC<br />
             Prices &amp; charts: CoinGecko free tier
           </div>
         </div>

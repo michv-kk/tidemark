@@ -191,69 +191,112 @@ async function fetchRpcChain(chain: RpcChainCfg, prices: Prices, seen: Set<strin
   return results;
 }
 
-// ─── Strategy 3: Bitcoin via mempool.space (server-side → Redis) ─────────────
-// Fetches the last 10 confirmed BTC blocks (~100 min window per invocation).
-// Redis accumulates these over time to cover the full 48-hour history.
+// ─── Strategy 3: Bitcoin via Blockchair (server-side → Redis) ────────────────
+// Blockchair free API returns up to 100 recent large BTC transactions in one call,
+// covering ~24–48 h of history. Only called when Redis BTC data is thin (<20 txs)
+// to stay well within free-tier limits (~2 calls/day in steady state).
 
-interface MempoolBlock { id: string; height: number; timestamp: number; }
-interface MempoolTx {
-  txid: string;
-  vin:  Array<{ prevout?: { scriptpubkey_address?: string; value?: number } }>;
-  vout: Array<{ scriptpubkey_address?: string; value?: number }>;
-  status?: { block_height?: number; block_time?: number; confirmed?: boolean };
+interface BlockchairTx {
+  hash: string;
+  time: string;            // "2025-01-01 12:00:00"
+  input_total: number;     // satoshis
+  output_total: number;    // satoshis
+  output_total_usd: number;
+  block_id: number;
 }
 
-async function fetchBitcoin(prices: Prices, seen: Set<string>): Promise<object[]> {
+async function fetchBitcoin(prices: Prices, seen: Set<string>, storedBtcCount: number): Promise<object[]> {
+  const results: object[] = [];
+
+  // ── Recent blocks via mempool.space (always runs, covers last ~2 h) ─────────
   try {
     const blocksRes = await fetch('https://mempool.space/api/blocks', {
       cache: 'no-store', signal: AbortSignal.timeout(10_000),
     });
-    if (!blocksRes.ok) return [];
-    const blocks: MempoolBlock[] = await blocksRes.json();
-    if (!Array.isArray(blocks)) return [];
-
-    // Fetch 10 most recent confirmed blocks
-    const results: object[] = [];
-    const blockResults = await Promise.allSettled(
-      blocks.slice(0, 10).map(async (block) => {
-        try {
-          const res = await fetch(`https://mempool.space/api/block/${block.id}/txs/0`, {
-            cache: 'no-store', signal: AbortSignal.timeout(10_000),
-          });
-          if (!res.ok) return [];
-          const txs: MempoolTx[] = await res.json();
-          if (!Array.isArray(txs)) return [];
-
-          const blockTxs: object[] = [];
-          for (const tx of txs) {
-            const id = `btc-${tx.txid}`;
-            if (seen.has(id)) continue;
-            const totalSats = tx.vout.reduce((s, o) => s + (o.value ?? 0), 0);
-            const btcAmount = totalSats / 1e8;
-            const usdValue  = btcAmount * prices.btc;
-            if (usdValue < MIN_USD) continue;
-            const blockTime = tx.status?.block_time;
-            if (!blockTime) continue;
-            const fromAddr = tx.vin?.[0]?.prevout?.scriptpubkey_address ?? 'unknown';
-            const toAddr   = tx.vout?.[0]?.scriptpubkey_address ?? 'unknown';
-            seen.add(id);
-            blockTxs.push({
-              id, hash: tx.txid, chain: 'BTC', from: fromAddr, to: toAddr,
-              value: usdValue, amount: btcAmount, token: 'BTC',
-              timestamp: blockTime * 1000,
-              blockNumber: tx.status?.block_height ?? 0,
-              type: 'transfer', isWhale: usdValue >= 500_000, source: 'mempool',
-            });
-          }
-          return blockTxs;
-        } catch { return []; }
-      })
-    );
-    for (const r of blockResults) {
-      if (r.status === 'fulfilled') results.push(...r.value);
+    if (blocksRes.ok) {
+      const blocks: Array<{ id: string; height: number; timestamp: number }> = await blocksRes.json();
+      if (Array.isArray(blocks)) {
+        const blockResults = await Promise.allSettled(
+          blocks.slice(0, 6).map(async (block) => {
+            try {
+              const res = await fetch(`https://mempool.space/api/block/${block.id}/txs/0`, {
+                cache: 'no-store', signal: AbortSignal.timeout(10_000),
+              });
+              if (!res.ok) return [];
+              const txs: Array<{
+                txid: string;
+                vin: Array<{ prevout?: { scriptpubkey_address?: string; value?: number } }>;
+                vout: Array<{ scriptpubkey_address?: string; value?: number }>;
+                status?: { block_height?: number; block_time?: number };
+              }> = await res.json();
+              if (!Array.isArray(txs)) return [];
+              const out: object[] = [];
+              for (const tx of txs) {
+                const id = `btc-${tx.txid}`;
+                if (seen.has(id)) continue;
+                const totalSats = tx.vout.reduce((s, o) => s + (o.value ?? 0), 0);
+                const btcAmt = totalSats / 1e8;
+                const usd   = btcAmt * prices.btc;
+                if (usd < MIN_USD) continue;
+                const blockTime = tx.status?.block_time;
+                if (!blockTime) continue;
+                seen.add(id);
+                out.push({
+                  id, hash: tx.txid, chain: 'BTC',
+                  from: tx.vin?.[0]?.prevout?.scriptpubkey_address ?? 'unknown',
+                  to:   tx.vout?.[0]?.scriptpubkey_address ?? 'unknown',
+                  value: usd, amount: btcAmt, token: 'BTC',
+                  timestamp: blockTime * 1000,
+                  blockNumber: tx.status?.block_height ?? 0,
+                  type: 'transfer', isWhale: usd >= 500_000, source: 'mempool',
+                });
+              }
+              return out;
+            } catch { return []; }
+          })
+        );
+        for (const r of blockResults) {
+          if (r.status === 'fulfilled') results.push(...r.value);
+        }
+      }
     }
-    return results;
-  } catch { return []; }
+  } catch { /* mempool.space unavailable */ }
+
+  // ── Blockchair historical catch-up (only when Redis BTC history is thin) ────
+  // This runs on first deploy (empty Redis) and after TTL expiry — ~2×/48h.
+  if (storedBtcCount < 20) {
+    try {
+      const url = 'https://api.blockchair.com/bitcoin/transactions' +
+        '?q=output_total_usd(50000..)' +
+        '&s=time(desc)' +
+        '&limit=100' +
+        '&fields=hash,time,output_total,output_total_usd,block_id';
+      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+      if (res.ok) {
+        const data = await res.json();
+        const txList: BlockchairTx[] = data?.data ?? [];
+        for (const tx of txList) {
+          const id = `btc-${tx.hash}`;
+          if (seen.has(id)) continue;
+          const usd = tx.output_total_usd ?? 0;
+          if (usd < MIN_USD) continue;
+          // Blockchair time format: "2025-01-01 12:00:00" UTC
+          const ts = tx.time ? new Date(tx.time.replace(' ', 'T') + 'Z').getTime() : 0;
+          if (!ts) continue;
+          seen.add(id);
+          results.push({
+            id, hash: tx.hash, chain: 'BTC',
+            from: 'multiple inputs', to: 'multiple outputs',
+            value: usd, amount: (tx.output_total ?? 0) / 1e8, token: 'BTC',
+            timestamp: ts, blockNumber: tx.block_id ?? 0,
+            type: 'transfer', isWhale: usd >= 500_000, source: 'blockchair',
+          });
+        }
+      }
+    } catch { /* Blockchair unavailable */ }
+  }
+
+  return results;
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -287,6 +330,9 @@ export async function GET() {
   const seen     = new Set<string>(stored.map(t => t.id));
   const freshTxs: object[] = [];
 
+  // Count stored BTC transactions to decide whether Blockchair catch-up is needed
+  const storedBtcCount = stored.filter(t => t.chain === 'BTC').length;
+
   // 2. Fetch all chains in parallel
   const [ethResults, rpcResults, btcResult] = await Promise.allSettled([
     // Etherscan V2 — ETH, ARB, MATIC
@@ -297,8 +343,8 @@ export async function GET() {
     // eth_getLogs RPC — BSC, AVAX
     Promise.allSettled(RPC_CHAINS.map(c => fetchRpcChain(c, prices, seen))),
 
-    // Bitcoin via mempool.space — server-side, accumulates in Redis
-    fetchBitcoin(prices, seen),
+    // Bitcoin — recent blocks via mempool.space + Blockchair catch-up when Redis is thin
+    fetchBitcoin(prices, seen, storedBtcCount),
   ]);
 
   function collectSettled(r: PromiseSettledResult<PromiseSettledResult<object[]>[]>) {
