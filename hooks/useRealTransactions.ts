@@ -48,8 +48,9 @@ function calcStats(txs: Transaction[]): TransactionStats {
   const activeChains = Array.from(
     new Set(last24h.map(t => t.chain))
   ) as ChainId[];
-  const oneMinAgo = Date.now() - 60_000;
-  const txPerMinute = txs.filter(t => t.timestamp > oneMinAgo).length;
+  // 6-hour rolling average per hour — stable across all browsers, not noisy 60s snapshots
+  const sixHAgo     = Date.now() - 6 * 3_600_000;
+  const txPerMinute = Math.round(txs.filter(t => t.timestamp > sixHAgo).length / 6);
   return { totalVolume, biggestTx, activeChains, txPerMinute };
 }
 

@@ -28,9 +28,12 @@ function calcActiveChains(txs: Transaction[]): ChainId[] {
   return Array.from(active) as ChainId[];
 }
 
-function calcTransactionsPerMinute(txs: Transaction[]): number {
-  const oneMinAgo = Date.now() - 60_000;
-  return txs.filter(t => t.timestamp > oneMinAgo).length;
+function calcTransactionsPerHour(txs: Transaction[]): number {
+  // Use a 6-hour rolling window for a smooth, stable rate — not a noisy 60s snapshot.
+  // Divide by 6 to get avg transactions per hour.
+  const sixHAgo = Date.now() - 6 * 3_600_000;
+  const count   = txs.filter(t => t.timestamp > sixHAgo).length;
+  return Math.round(count / 6);
 }
 
 export default function StatsBar({ transactions, isLive, isLoading }: Props) {
@@ -39,7 +42,7 @@ export default function StatsBar({ transactions, isLive, isLoading }: Props) {
     vol24h: calcTotalVolume(transactions),
     maxTx: calcMaxTransaction(transactions),
     chains: calcActiveChains(transactions),
-    txPerMin: calcTransactionsPerMinute(transactions),
+    txPerMin: calcTransactionsPerHour(transactions),
   }), [transactions]);
 
   const cards = [
@@ -63,14 +66,14 @@ export default function StatsBar({ transactions, isLive, isLoading }: Props) {
     },
     {
       icon: <Activity size={18} className="text-green-400" />,
-      label: 'TX / Minute',
+      label: 'TX / Hour (avg)',
       value: `${stats.txPerMin}`,
       sub: isLive ? (
         <span className="flex items-center gap-1 text-green-400">
           <Radio size={9} />
-          Live rate
+          6h rolling avg
         </span>
-      ) : 'Live rate',
+      ) : '6h rolling avg',
     },
   ];
 
