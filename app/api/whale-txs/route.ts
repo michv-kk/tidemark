@@ -301,10 +301,28 @@ export async function GET() {
   const prices: Prices = pricesResult.status === 'fulfilled' ? pricesResult.value : { btc: 77_000, eth: 2_500, sol: 150 };
   const oneDayAgo = Math.floor(Date.now() / 1000) - 86_400;
 
-  // 1. Load stored history from Redis
+  // 1. Load stored history from Redis — merge v1 + v2 so no transactions are lost
   type TxRecord = { id: string; timestamp: number; [k: string]: unknown };
   let stored: TxRecord[] = [];
-  if (redis) { try { stored = (await redis.get<TxRecord[]>(REDIS_KEY)) ?? []; } catch {} }
+  if (redis) {
+    try {
+      const [v1Data, v2Data] = await Promise.all([
+        redis.get<TxRecord[]>('tidemark_whale_txs_v1'),
+        redis.get<TxRecord[]>('tidemark_whale_txs_v2'),
+      ]);
+      const combined = [...(v1Data ?? []), ...(v2Data ?? [])];
+      // Deduplicate by id, keep newest copy
+      const byId = new Map<string, TxRecord>();
+      for (const t of combined) byId.set(t.id, t);
+      stored = Array.from(byId.values())
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, REDIS_MAX);
+      // Delete v2 after merging so we don't double-merge forever
+      if (v2Data && v2Data.length > 0) {
+        await redis.del('tidemark_whale_txs_v2').catch(() => {});
+      }
+    } catch { stored = []; }
+  }
 
   const seen = new Set<string>(stored.map(t => t.id));
   const freshTxs: object[] = [];
