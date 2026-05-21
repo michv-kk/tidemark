@@ -18,18 +18,18 @@ const MIN_USD   = 50_000;
 
 // ─── Prices ───────────────────────────────────────────────────────────────────
 
-interface Prices { btc: number; eth: number; sol: number; }
+interface Prices { btc: number; eth: number; }
 
 async function getPrices(): Promise<Prices> {
   try {
     const res = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd',
+      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd',
       { cache: 'no-store', signal: AbortSignal.timeout(8_000) },
     );
     const d = await res.json();
-    return { btc: d?.bitcoin?.usd ?? 77_000, eth: d?.ethereum?.usd ?? 2_500, sol: d?.solana?.usd ?? 150 };
+    return { btc: d?.bitcoin?.usd ?? 77_000, eth: d?.ethereum?.usd ?? 2_500 };
   } catch {
-    return { btc: 77_000, eth: 2_500, sol: 150 };
+    return { btc: 77_000, eth: 2_500 };
   }
 }
 
@@ -38,9 +38,9 @@ async function getPrices(): Promise<Prices> {
 const API_KEY = process.env.NEXT_PUBLIC_ETHERSCAN_API_KEY ?? '';
 
 interface TokenCfg { contractAddress: string; symbol: string; decimals: number; priceKey?: 'eth' | 'btc'; }
-interface ChainCfg { chainId: string; label: string; idPrefix: string; tokens: TokenCfg[]; }
+interface ChainCfg  { chainId: string; label: string; idPrefix: string; tokens: TokenCfg[]; }
 
-const ETHERSCAN_V2_CHAINS: ChainCfg[] = [
+const ETHERSCAN_CHAINS: ChainCfg[] = [
   {
     chainId: '1', label: 'ETH', idPrefix: 'eth',
     tokens: [
@@ -67,23 +67,11 @@ const ETHERSCAN_V2_CHAINS: ChainCfg[] = [
   },
 ];
 
-interface RawTx { hash: string; from: string; to: string; value: string; timeStamp: string; blockNumber: string; }
-
-async function fetchEtherscanV2(chain: ChainCfg, token: TokenCfg, prices: Prices, oneDayAgo: number, seen: Set<string>) {
-  const url = `https://api.etherscan.io/v2/api?chainid=${chain.chainId}&module=account&action=tokentx` +
-    `&contractaddress=${token.contractAddress}&page=1&offset=1000&sort=desc&apikey=${API_KEY}`;
-  try {
-    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(12_000) });
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (data.status !== '1' || !Array.isArray(data.result)) return [];
-    return parseTxList(data.result, chain.label, chain.idPrefix, token, prices, oneDayAgo, seen, 'etherscan');
-  } catch { return []; }
-}
+interface RawEthTx { hash: string; from: string; to: string; value: string; timeStamp: string; blockNumber: string; }
 
 function parseTxList(
-  txList: RawTx[], label: string, idPrefix: string,
-  token: TokenCfg, prices: Prices, oneDayAgo: number, seen: Set<string>, source: string,
+  txList: RawEthTx[], label: string, idPrefix: string,
+  token: TokenCfg, prices: Prices, oneDayAgo: number, seen: Set<string>,
 ): object[] {
   const results: object[] = [];
   for (const tx of txList) {
@@ -98,50 +86,24 @@ function parseTxList(
     seen.add(id);
     results.push({ id, hash: tx.hash, chain: label, from: tx.from ?? '', to: tx.to ?? '',
       value: val, amount: raw, token: token.symbol, timestamp: ts * 1000,
-      blockNumber: parseInt(tx.blockNumber, 10), type: 'transfer', isWhale: val >= 500_000, source });
+      blockNumber: parseInt(tx.blockNumber, 10), type: 'transfer', isWhale: val >= 500_000, source: 'etherscan' });
   }
   return results;
 }
 
-// ─── Strategy 2: Chain-specific Etherscan APIs (BASE, OP) ─────────────────────
-// basescan.org and api-optimistic.etherscan.io accept the same Etherscan API key.
-
-interface EtherscanV1Cfg {
-  apiBase: string; label: string; idPrefix: string; tokens: TokenCfg[];
-}
-
-const ETHERSCAN_V1_CHAINS: EtherscanV1Cfg[] = [
-  {
-    label: 'BASE', idPrefix: 'base',
-    apiBase: 'https://api.basescan.org/api',
-    tokens: [
-      { contractAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', symbol: 'USDC', decimals: 6 },
-      { contractAddress: '0x4200000000000000000000000000000000000006', symbol: 'WETH', decimals: 18, priceKey: 'eth' },
-    ],
-  },
-  {
-    label: 'OP', idPrefix: 'op',
-    apiBase: 'https://api-optimistic.etherscan.io/api',
-    tokens: [
-      { contractAddress: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', symbol: 'USDC', decimals: 6 },
-      { contractAddress: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58', symbol: 'USDT', decimals: 6 },
-    ],
-  },
-];
-
-async function fetchEtherscanV1(chain: EtherscanV1Cfg, token: TokenCfg, prices: Prices, oneDayAgo: number, seen: Set<string>) {
-  const url = `${chain.apiBase}?module=account&action=tokentx` +
-    `&contractaddress=${token.contractAddress}&page=1&offset=500&sort=desc&apikey=${API_KEY}`;
+async function fetchEtherscanChain(chain: ChainCfg, token: TokenCfg, prices: Prices, oneDayAgo: number, seen: Set<string>) {
+  const url = `https://api.etherscan.io/v2/api?chainid=${chain.chainId}&module=account&action=tokentx` +
+    `&contractaddress=${token.contractAddress}&page=1&offset=1000&sort=desc&apikey=${API_KEY}`;
   try {
     const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(12_000) });
     if (!res.ok) return [];
     const data = await res.json();
     if (data.status !== '1' || !Array.isArray(data.result)) return [];
-    return parseTxList(data.result, chain.label, chain.idPrefix, token, prices, oneDayAgo, seen, 'etherscan');
+    return parseTxList(data.result, chain.label, chain.idPrefix, token, prices, oneDayAgo, seen);
   } catch { return []; }
 }
 
-// ─── Strategy 3: eth_getLogs via public RPC (BSC, AVAX) ──────────────────────
+// ─── Strategy 2: eth_getLogs via public RPC (BSC, AVAX) ──────────────────────
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
@@ -229,76 +191,76 @@ async function fetchRpcChain(chain: RpcChainCfg, prices: Prices, seen: Set<strin
   return results;
 }
 
-// ─── Strategy 4: Solana — server-side via Solscan public API ─────────────────
-// Uses Solscan's free public API to get recent large USDC / USDT / SOL transfers.
-// No API key needed, much lighter than parsing individual RPC transactions.
+// ─── Strategy 3: Bitcoin via mempool.space (server-side → Redis) ─────────────
+// Fetches the last 10 confirmed BTC blocks (~100 min window per invocation).
+// Redis accumulates these over time to cover the full 48-hour history.
 
-const SOLSCAN_TOKENS = [
-  { mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', symbol: 'USDC', decimals: 6 },
-  { mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', symbol: 'USDT', decimals: 6 },
-];
-
-interface SolscanTransfer {
-  signature: string;
-  blockTime: number;
-  src: string;
-  dst: string;
-  amount: number;      // already in token units (not raw)
-  decimals: number;
+interface MempoolBlock { id: string; height: number; timestamp: number; }
+interface MempoolTx {
+  txid: string;
+  vin:  Array<{ prevout?: { scriptpubkey_address?: string; value?: number } }>;
+  vout: Array<{ scriptpubkey_address?: string; value?: number }>;
+  status?: { block_height?: number; block_time?: number; confirmed?: boolean };
 }
 
-async function fetchSolana(prices: Prices, seen: Set<string>): Promise<object[]> {
-  const results: object[] = [];
-  const oneDayAgo = Math.floor(Date.now() / 1000) - 86_400;
+async function fetchBitcoin(prices: Prices, seen: Set<string>): Promise<object[]> {
+  try {
+    const blocksRes = await fetch('https://mempool.space/api/blocks', {
+      cache: 'no-store', signal: AbortSignal.timeout(10_000),
+    });
+    if (!blocksRes.ok) return [];
+    const blocks: MempoolBlock[] = await blocksRes.json();
+    if (!Array.isArray(blocks)) return [];
 
-  await Promise.allSettled(SOLSCAN_TOKENS.map(async (token) => {
-    try {
-      // Solscan public API — no key needed, returns recent SPL transfers
-      const url = `https://public-api.solscan.io/token/transfer` +
-        `?tokenAddress=${token.mint}&limit=50&offset=0`;
-      const res = await fetch(url, {
-        headers: { accept: 'application/json' },
-        cache: 'no-store',
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const transfers: SolscanTransfer[] = Array.isArray(data) ? data : (data?.data ?? []);
+    // Fetch 10 most recent confirmed blocks
+    const results: object[] = [];
+    const blockResults = await Promise.allSettled(
+      blocks.slice(0, 10).map(async (block) => {
+        try {
+          const res = await fetch(`https://mempool.space/api/block/${block.id}/txs/0`, {
+            cache: 'no-store', signal: AbortSignal.timeout(10_000),
+          });
+          if (!res.ok) return [];
+          const txs: MempoolTx[] = await res.json();
+          if (!Array.isArray(txs)) return [];
 
-      for (const tx of transfers) {
-        if (!tx.signature || !tx.blockTime) continue;
-        if (tx.blockTime < oneDayAgo) continue;
-
-        const id = `sol-${tx.signature}`;
-        if (seen.has(id)) continue;
-
-        // amount is already in token units from Solscan
-        const amount = typeof tx.amount === 'number'
-          ? tx.amount / Math.pow(10, tx.decimals ?? token.decimals)
-          : 0;
-        const usd = amount; // USDC/USDT ≈ 1:1
-
-        if (usd < MIN_USD) continue;
-        seen.add(id);
-        results.push({
-          id, hash: tx.signature, chain: 'SOL',
-          from: tx.src ?? 'unknown', to: tx.dst ?? 'unknown',
-          value: usd, amount, token: token.symbol,
-          timestamp: tx.blockTime * 1000, blockNumber: 0,
-          type: 'transfer', isWhale: usd >= 500_000, source: 'solana',
-        });
-      }
-    } catch { /* Solscan unavailable — skip */ }
-  }));
-
-  return results;
+          const blockTxs: object[] = [];
+          for (const tx of txs) {
+            const id = `btc-${tx.txid}`;
+            if (seen.has(id)) continue;
+            const totalSats = tx.vout.reduce((s, o) => s + (o.value ?? 0), 0);
+            const btcAmount = totalSats / 1e8;
+            const usdValue  = btcAmount * prices.btc;
+            if (usdValue < MIN_USD) continue;
+            const blockTime = tx.status?.block_time;
+            if (!blockTime) continue;
+            const fromAddr = tx.vin?.[0]?.prevout?.scriptpubkey_address ?? 'unknown';
+            const toAddr   = tx.vout?.[0]?.scriptpubkey_address ?? 'unknown';
+            seen.add(id);
+            blockTxs.push({
+              id, hash: tx.txid, chain: 'BTC', from: fromAddr, to: toAddr,
+              value: usdValue, amount: btcAmount, token: 'BTC',
+              timestamp: blockTime * 1000,
+              blockNumber: tx.status?.block_height ?? 0,
+              type: 'transfer', isWhale: usdValue >= 500_000, source: 'mempool',
+            });
+          }
+          return blockTxs;
+        } catch { return []; }
+      })
+    );
+    for (const r of blockResults) {
+      if (r.status === 'fulfilled') results.push(...r.value);
+    }
+    return results;
+  } catch { return []; }
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function GET() {
   const [pricesResult] = await Promise.allSettled([getPrices()]);
-  const prices: Prices = pricesResult.status === 'fulfilled' ? pricesResult.value : { btc: 77_000, eth: 2_500, sol: 150 };
+  const prices: Prices = pricesResult.status === 'fulfilled' ? pricesResult.value : { btc: 77_000, eth: 2_500 };
   const oneDayAgo = Math.floor(Date.now() / 1000) - 86_400;
 
   // 1. Load stored history from Redis — merge v1 + v2 so no transactions are lost
@@ -311,39 +273,32 @@ export async function GET() {
         redis.get<TxRecord[]>('tidemark_whale_txs_v2'),
       ]);
       const combined = [...(v1Data ?? []), ...(v2Data ?? [])];
-      // Deduplicate by id, keep newest copy
       const byId = new Map<string, TxRecord>();
       for (const t of combined) byId.set(t.id, t);
       stored = Array.from(byId.values())
         .sort((a, b) => b.timestamp - a.timestamp)
         .slice(0, REDIS_MAX);
-      // Delete v2 after merging so we don't double-merge forever
       if (v2Data && v2Data.length > 0) {
         await redis.del('tidemark_whale_txs_v2').catch(() => {});
       }
     } catch { stored = []; }
   }
 
-  const seen = new Set<string>(stored.map(t => t.id));
+  const seen     = new Set<string>(stored.map(t => t.id));
   const freshTxs: object[] = [];
 
   // 2. Fetch all chains in parallel
-  const [v2Results, v1Results, rpcResults, solResults] = await Promise.allSettled([
+  const [ethResults, rpcResults, btcResult] = await Promise.allSettled([
     // Etherscan V2 — ETH, ARB, MATIC
     API_KEY
-      ? Promise.allSettled(ETHERSCAN_V2_CHAINS.flatMap(c => c.tokens.map(t => fetchEtherscanV2(c, t, prices, oneDayAgo, seen))))
-      : Promise.resolve([]),
-
-    // Etherscan V1 chain-specific — BASE, OP
-    API_KEY
-      ? Promise.allSettled(ETHERSCAN_V1_CHAINS.flatMap(c => c.tokens.map(t => fetchEtherscanV1(c, t, prices, oneDayAgo, seen))))
+      ? Promise.allSettled(ETHERSCAN_CHAINS.flatMap(c => c.tokens.map(t => fetchEtherscanChain(c, t, prices, oneDayAgo, seen))))
       : Promise.resolve([]),
 
     // eth_getLogs RPC — BSC, AVAX
     Promise.allSettled(RPC_CHAINS.map(c => fetchRpcChain(c, prices, seen))),
 
-    // Solana — direct RPC, server-side, goes into Redis
-    fetchSolana(prices, seen),
+    // Bitcoin via mempool.space — server-side, accumulates in Redis
+    fetchBitcoin(prices, seen),
   ]);
 
   function collectSettled(r: PromiseSettledResult<PromiseSettledResult<object[]>[]>) {
@@ -352,12 +307,11 @@ export async function GET() {
         if (x.status === 'fulfilled') freshTxs.push(...x.value);
   }
 
-  collectSettled(v2Results as PromiseSettledResult<PromiseSettledResult<object[]>[]>);
-  collectSettled(v1Results as PromiseSettledResult<PromiseSettledResult<object[]>[]>);
+  collectSettled(ethResults as PromiseSettledResult<PromiseSettledResult<object[]>[]>);
   collectSettled(rpcResults as PromiseSettledResult<PromiseSettledResult<object[]>[]>);
-  if (solResults.status === 'fulfilled') freshTxs.push(...solResults.value);
+  if (btcResult.status === 'fulfilled') freshTxs.push(...btcResult.value);
 
-  // 3. Merge, deduplicate, cap
+  // 3. Merge, deduplicate, cap at 48h / REDIS_MAX
   const cutoff = Date.now() - CUTOFF_MS;
   const merged = ([...freshTxs, ...stored] as TxRecord[])
     .filter(t => t.timestamp > cutoff)

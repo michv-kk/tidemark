@@ -2,10 +2,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Transaction, ChainId } from '@/lib/types';
 import { fetchEtherscanTransactions } from '@/lib/api/etherscan';
-import { fetchMempoolTransactions } from '@/lib/api/mempool';
 
-// Solana is now fetched server-side inside /api/whale-txs and included
-// in the same Redis-backed response — no separate client-side Solana call needed.
+// All chains (ETH, BTC, BSC, AVAX, ARB, MATIC) are now fetched server-side
+// inside /api/whale-txs and accumulated in Redis. One endpoint, one source of truth.
 
 export type SourceKey = 'etherscan' | 'mempool' | 'solana';
 export type SourceStatus = 'loading' | 'ok' | 'error';
@@ -32,9 +31,8 @@ export interface UseRealTransactionsResult {
   isUsingFallback: boolean;
 }
 
-const ETHERSCAN_INTERVAL = 30_000;
-const MEMPOOL_INTERVAL   = 20_000;
-const MAX_TXS            = 1000;
+const POLL_INTERVAL = 30_000;
+const MAX_TXS       = 1000;
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
@@ -93,38 +91,29 @@ export function useRealTransactions(): UseRealTransactionsResult {
     setTransactions(prev => mergeTxs(prev, incoming));
   }, []);
 
-  // ── Fetch functions ───────────────────────────────────────────────────────
+  // ── Single fetch — all chains come from the Redis-backed /api/whale-txs ──
 
-  const fetchEtherscan = useCallback(async (initial = false) => {
-    if (initial) setStatus('etherscan', 'loading');
+  const fetchAll = useCallback(async (initial = false) => {
+    if (initial) {
+      setStatus('etherscan', 'loading');
+      setStatus('mempool', 'loading');
+      setStatus('solana', 'loading');
+    }
     try {
-      const txs = await fetchEtherscanTransactions();
+      const txs = await fetchEtherscanTransactions(); // calls /api/whale-txs
       if (txs.length > 0) {
         sourceSuccess.current.etherscan = true;
-        // Solana txs are bundled inside the whale-txs response — mark solana ok too
-        if (txs.some(t => t.chain === 'SOL')) {
-          sourceSuccess.current.solana = true;
-          setStatus('solana', 'ok');
-        }
+        sourceSuccess.current.mempool   = true;
+        sourceSuccess.current.solana    = true;
         addTxs(txs);
       }
       setStatus('etherscan', 'ok');
+      setStatus('mempool',   'ok');
+      setStatus('solana',    'ok');
     } catch {
       setStatus('etherscan', 'error');
-    }
-  }, [setStatus, addTxs]);
-
-  const fetchMempool = useCallback(async (initial = false) => {
-    if (initial) setStatus('mempool', 'loading');
-    try {
-      const txs = await fetchMempoolTransactions();
-      if (txs.length > 0) {
-        sourceSuccess.current.mempool = true;
-        addTxs(txs);
-      }
-      setStatus('mempool', 'ok');
-    } catch {
-      setStatus('mempool', 'error');
+      setStatus('mempool',   'error');
+      setStatus('solana',    'error');
     }
   }, [setStatus, addTxs]);
 
@@ -139,15 +128,8 @@ export function useRealTransactions(): UseRealTransactionsResult {
     if (initialDone.current) return;
     initialDone.current = true;
 
-    Promise.allSettled([
-      fetchEtherscan(true),
-      fetchMempool(true),
-    ]).then(() => {
-      if (isMounted.current) {
-        setIsLoading(false);
-        // Solana is bundled in whale-txs; mark ok if not already set
-        setStatus('solana', 'ok');
-      }
+    fetchAll(true).then(() => {
+      if (isMounted.current) setIsLoading(false);
     });
 
     return () => { isMounted.current = false; };
@@ -157,19 +139,13 @@ export function useRealTransactions(): UseRealTransactionsResult {
   // ── Polling ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const id = setInterval(() => fetchEtherscan(false), ETHERSCAN_INTERVAL);
+    const id = setInterval(() => fetchAll(false), POLL_INTERVAL);
     return () => clearInterval(id);
-  }, [fetchEtherscan]);
-
-  useEffect(() => {
-    const id = setInterval(() => fetchMempool(false), MEMPOOL_INTERVAL);
-    return () => clearInterval(id);
-  }, [fetchMempool]);
+  }, [fetchAll]);
 
   const isUsingFallback =
     !isLoading &&
-    !sourceSuccess.current.etherscan &&
-    !sourceSuccess.current.mempool;
+    !sourceSuccess.current.etherscan;
 
   return {
     transactions,
