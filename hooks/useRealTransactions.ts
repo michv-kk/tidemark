@@ -38,13 +38,14 @@ const MAX_TXS            = 1000;
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 function calcStats(txs: Transaction[]): TransactionStats {
-  const totalVolume = txs.reduce((sum, t) => sum + t.value, 0);
+  const oneDayAgo = Date.now() - 86_400_000;
+  const last24h = txs.filter(t => t.timestamp > oneDayAgo);
+  const totalVolume = last24h.reduce((sum, t) => sum + t.value, 0);
   const biggestTx = txs.length > 0
     ? txs.reduce((max, t) => (t.value > max.value ? t : max), txs[0])
     : null;
-  const oneDayAgo = Date.now() - 86_400_000;
   const activeChains = Array.from(
-    new Set(txs.filter(t => t.timestamp > oneDayAgo).map(t => t.chain))
+    new Set(last24h.map(t => t.chain))
   ) as ChainId[];
   const oneMinAgo = Date.now() - 60_000;
   const txPerMinute = txs.filter(t => t.timestamp > oneMinAgo).length;

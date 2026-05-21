@@ -10,8 +10,10 @@ interface Props {
   isLoading?: boolean;
 }
 
-function calcTotalVolume(txs: Transaction[]): number {
-  return txs.reduce((sum, t) => sum + t.value, 0);
+function calcTotalVolume(txs: Transaction[]): { volume: number; count: number } {
+  const oneDayAgo = Date.now() - 86_400_000;
+  const recent = txs.filter(t => t.timestamp > oneDayAgo);
+  return { volume: recent.reduce((sum, t) => sum + t.value, 0), count: recent.length };
 }
 
 function calcMaxTransaction(txs: Transaction[]): Transaction | null {
@@ -34,7 +36,7 @@ function calcTransactionsPerMinute(txs: Transaction[]): number {
 export default function StatsBar({ transactions, isLive, isLoading }: Props) {
   const fmt = useCurrency();
   const stats = useMemo(() => ({
-    volume: calcTotalVolume(transactions),
+    vol24h: calcTotalVolume(transactions),
     maxTx: calcMaxTransaction(transactions),
     chains: calcActiveChains(transactions),
     txPerMin: calcTransactionsPerMinute(transactions),
@@ -44,8 +46,8 @@ export default function StatsBar({ transactions, isLive, isLoading }: Props) {
     {
       icon: <TrendingUp size={18} className="text-cyan-400" />,
       label: 'Total Volume 24h',
-      value: fmt(stats.volume, true),
-      sub: `${transactions.length} transactions`,
+      value: fmt(stats.vol24h.volume, true),
+      sub: `${stats.vol24h.count} transactions (24h)`,
     },
     {
       icon: <Zap size={18} className="text-yellow-400" />,
